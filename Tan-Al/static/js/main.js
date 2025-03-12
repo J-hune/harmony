@@ -1,13 +1,41 @@
 import * as THREE from "three";
 import {OrbitControls} from "three/examples/jsm/controls/OrbitControls";
-import { LineGeometry } from "three/examples/jsm/lines/LineGeometry";
+import {LineGeometry} from "three/examples/jsm/lines/LineGeometry";
 import {LineMaterial} from "three/examples/jsm/lines/LineMaterial";
-import { Line2 } from "three/examples/jsm/lines/Line2";
-import Stats from "stats"
+import {Line2} from "three/examples/jsm/lines/Line2";
+import Stats from "stats";
+import {io} from "socket.io";
 
-let scene, camera, renderer, controls, pointCloud, stats;
+let scene, camera, renderer, controls, pointCloud;
+let overlayMesh = {}
+
+let stats, socket;
+
 init3D();
+initSocket();
 animate();
+
+function initSocket() {
+    socket = io();
+
+    socket.on('connect', () => {
+        console.log('Connecté au serveur via WebSocket');
+    });
+
+    socket.on('server_response', (msg) => {
+        console.log('Message du serveur :', msg.data);
+    });
+
+    socket.on('convex_hull', (data) => {
+        console.log('Chargement des sommets de l\'enveloppe convexe...');
+        createConvexHullCircles(data.vertices, data.faces);
+        console.log(data.faces);
+    });
+
+    socket.on('error', (data) => {
+        console.error('Erreur reçue du serveur :', data.message);
+    });
+}
 
 function init3D() {
     // Initialisation de la scène, caméra et renderer
@@ -41,23 +69,12 @@ function init3D() {
         if (file) {
             const reader = new FileReader();
             reader.onload = (event) => {
+                // Envoi de l'image encodée en base64 via Socket.IO
+                socket.emit('upload_image', {image_data: event.target.result});
+
                 const img = new Image();
                 img.onload = () => createPointCloud(img);
                 img.src = event.target.result;
-
-                // On envoie l'image au serveur
-                const formData = new FormData();
-                formData.append("image", file);
-                fetch("/api/upload", {
-                    method: "POST",
-                    body: formData,
-                }).then((response) => {
-                    if (response.ok) {
-                        console.log("Image envoyée au serveur");
-                    } else {
-                        console.error("Erreur lors de l'envoi de l'image");
-                    }
-                });
             };
             reader.readAsDataURL(file);
         }
@@ -121,6 +138,9 @@ function buildRgbCube() {
 function createPointCloud(img) {
     if (pointCloud !== null) {
         scene.remove(pointCloud);
+        scene.remove(overlayMesh.rims);
+        scene.remove(overlayMesh.circle);
+        overlayMesh = {};
     }
 
     // Création d'un canvas pour extraire les pixels
@@ -164,16 +184,89 @@ function createPointCloud(img) {
     scene.add(pointCloud);
 }
 
+function createConvexHullCircles(vertices, faces) {
+    if (!vertices || vertices.length === 0) return;
+
+    // Conteneurs pour les cercles, leurs contours et les arêtes
+    overlayMesh.circle = new THREE.Object3D();
+    overlayMesh.rims = new THREE.Object3D();
+    overlayMesh.edges = new THREE.Object3D();
+
+    const radius = 0.02; // Rayon du cercle
+    const radiusRim = radius * 1.2; // Rayon du contour
+    const segments = 32; // Précision du cercle
+
+    // Géométrie et matériaux pour les cercles et les contours
+    const circleGeometry = new THREE.SphereGeometry(radius, segments, segments);
+    const circleRimGeometry = new THREE.CircleGeometry(radiusRim, segments);
+    const circleRimMaterial = new THREE.MeshBasicMaterial({color: 0xFFFFFF});
+
+    vertices.forEach(vertex => {
+        // Définition de la couleur
+        const color = new THREE.Color(vertex[0], vertex[1], vertex[2]).convertSRGBToLinear();
+        const circleMaterial = new THREE.MeshBasicMaterial({color});
+
+        // Création du cercle
+        const circle = new THREE.Mesh(circleGeometry, circleMaterial);
+        circle.position.set(vertex[0] - 0.5, vertex[1] - 0.5, vertex[2] - 0.5);
+        overlayMesh.circle.add(circle);
+
+        // Création du contour
+        const rim = new THREE.Mesh(circleRimGeometry, circleRimMaterial);
+        rim.position.set(vertex[0] - 0.5, vertex[1] - 0.5, vertex[2] - 0.5);
+        overlayMesh.rims.add(rim);
+    });
+
+    // Création des arêtes à partir des faces
+    const edgeMaterial = new LineMaterial({
+        linewidth: 0.003, // Ligne épaisse
+        color: 0xfffffff, // Couleur de la ligne
+        vertexColors: true,
+    });
+
+
+    faces.forEach(face => {
+        const vertex1 = new THREE.Vector3(face[0][0] - 0.5, face[0][1] - 0.5, face[0][2] - 0.5);
+        const vertex2 = new THREE.Vector3(face[1][0] - 0.5, face[1][1] - 0.5, face[1][2] - 0.5);
+        const vertex3 = new THREE.Vector3(face[2][0] - 0.5, face[2][1] - 0.5, face[2][2] - 0.5);
+
+        // Ajouter des arêtes (lignes entre les vertices)
+        addEdgeToScene(vertex1, vertex2);
+        addEdgeToScene(vertex2, vertex3);
+        addEdgeToScene(vertex3, vertex1);
+    });
+
+    // Fonction pour ajouter une arête
+    function addEdgeToScene(v1, v2) {
+        const points = [v1, v2];
+        const geometry = new LineGeometry();
+        geometry.setPositions(points.map(p => [p.x, p.y, p.z]).flat());
+        geometry.setColors([1, 1, 1, 1, 1, 1]);
+        const line = new Line2(geometry, edgeMaterial);
+        overlayMesh.edges.add(line);
+    }
+
+    // Ajouter les groupes à la scène
+    scene.add(overlayMesh.circle);
+    scene.add(overlayMesh.rims);
+    scene.add(overlayMesh.edges);
+}
+
+
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-controls.enableDamping = true;
 function animate() {
+    // Si les cercles de l'enveloppe convexe sont présents, on les fait toujours regarder vers la caméra
+    if (overlayMesh.rims) overlayMesh.rims.children.forEach(rim => {
+        rim.lookAt(camera.position);
+    });
+
     requestAnimationFrame(animate);
-    if (controls.dampingFactor > 0) controls.update();
+    controls.update();
     renderer.render(scene, camera);
     stats.update();
 }

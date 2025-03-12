@@ -1,85 +1,69 @@
-import os
-
-import numpy as np
-from PIL import Image
-
+import base64
 import cv2
+import numpy as np
 from scipy.spatial import ConvexHull
-
-from flask import Flask, render_template, request, jsonify
-from flask_cors import CORS
-from werkzeug.utils import secure_filename
+from flask import Flask, render_template
+from flask_socketio import SocketIO, emit
 
 from convex_hull import palette_simplification
 from plot import plot_palette, plot_convex_hull_3d
 
 app = Flask(__name__)
-CORS(app)
+app.config['SECRET_KEY'] = 'secret!'
+socketio = SocketIO(app, cors_allowed_origins="*")  # Pour autoriser les connexions cross-origin en développement
 
-ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png"}
 
-def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+@app.route('/')
+def index():
+    return render_template('index.html')  # La page HTML qui contiendra le code client
 
-@app.route("/")
-def hello_world():
-    return render_template("index.html")
 
-@app.route("/api/upload", methods=["POST"])
-def upload():
-    if "image" not in request.files:
-        return jsonify({"error": "No file part"}), 400
+@socketio.on('connect')
+def handle_connect():
+    print("Flask: Un client est connecté")
+    emit('server_response', {'data': 'Connecté au serveur'})
 
-    file = request.files["image"]
 
-    if file.filename == "":
-        return jsonify({"error": "No selected file"}), 400
+@socketio.on('disconnect')
+def handle_disconnect():
+    print("Flask: Un client s'est déconnecté")
 
-    if not allowed_file(file.filename):
-        return jsonify({"error": "Invalid file extension"}), 400
 
-    # Convertir l'image en un tableau numpy pour OpenCV
+@socketio.on('upload_image')
+def handle_upload_image(data):
+    """
+    Attendu : data contient une clé "image_data" qui correspond à l'image encodée en base64.
+    """
     try:
-        in_memory_file = np.frombuffer(file.read(), dtype=np.uint8)
-        img = cv2.imdecode(in_memory_file, cv2.IMREAD_COLOR)  # Lecture avec OpenCV
+        img_data = data.get('image_data')
+        if not img_data:
+            emit('error', {'message': 'Aucune donnée image fournie'})
+            return
+
+        # Retirer l'en-tête si présent ("data:image/png;base64,")
+        header, encoded = img_data.split(',', 1)
+        img_bytes = base64.b64decode(encoded)
+
+        # Conversion en tableau numpy puis décodage avec OpenCV
+        nparr = np.frombuffer(img_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
         if img is None:
-            return jsonify({"error": "Invalid image data"}), 400
+            emit('error', {'message': "Données image invalides"})
+            return
 
-        # Exemple de traitement : convertir en niveaux de gris
+        # Traitement : conversion en RGB et extraction des pixels normalisés
         pixels = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).reshape(-1, 3) / 255.0
 
+        # Calcul de l'enveloppe convexe
         hull = ConvexHull(pixels)
-        hull_colors = pixels[hull.vertices]
-        print(hull_colors)
+        vertices = pixels[hull.vertices]
+        faces = pixels[hull.simplices]
 
-        # On peut maintenant utiliser `img` ou `gray` pour du traitement OpenCV
-        return jsonify({"message": "Image processed successfully"}), 200
-
+        emit('convex_hull', {'vertices': vertices.tolist(), 'faces': faces.tolist()})
     except Exception as e:
-        return jsonify({"error": f"Processing error: {str(e)}"}), 500
+        emit('error', {'message': f"Erreur de traitement : {str(e)}"})
 
 
-def main():
-    # On charge l'image avec OpenCV
-    image = cv2.imread("0.jpg")
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    pixels = image_rgb.reshape(-1, 3) / 255.0  # Normalisation [0, 1]
-
-    # On calcule le Convex Hull
-    hull = ConvexHull(pixels)
-    hull_colors = pixels[hull.vertices]  # On récupère les couleurs du hull
-
-    # On simplifie la palette de couleurs
-    simplified_hull_colors = palette_simplification(pixels, hull_colors)
-
-    # Affichage du Convex Hull
-    plot_convex_hull_3d(pixels, simplified_hull_colors)
-
-    # Affichage de la palette de couleurs
-    plot_palette(simplified_hull_colors)
-
-
-if __name__ == "__main__":
-    app.run(debug=True)
-    #main()
+if __name__ == '__main__':
+    socketio.run(app, debug=True, allow_unsafe_werkzeug=True)
