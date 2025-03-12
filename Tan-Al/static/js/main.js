@@ -23,13 +23,17 @@ function initSocket() {
     });
 
     socket.on('server_response', (msg) => {
-        console.log('Message du serveur :', msg.data);
+        if (msg.error) console.error('Erreur reçue du serveur :', msg.error);
+        else console.log('Message du serveur :', msg.data);
+    });
+
+    socket.on('server_log', (msg) => {
+        console.log('Log du serveur :', msg.data);
     });
 
     socket.on('convex_hull', (data) => {
-        console.log('Chargement des sommets de l\'enveloppe convexe...');
+        console.log('Chargement des sommets de l\'enveloppe convexe contenant ' + data.vertices.length + ' sommets...');
         createConvexHullCircles(data.vertices, data.faces);
-        console.log(data.faces);
     });
 
     socket.on('error', (data) => {
@@ -71,6 +75,7 @@ function init3D() {
             reader.onload = (event) => {
                 // Envoi de l'image encodée en base64 via Socket.IO
                 socket.emit('upload_image', {image_data: event.target.result});
+                console.log("Envoi de l'image au serveur, en attente de l'enveloppe convexe...");
 
                 const img = new Image();
                 img.onload = () => createPointCloud(img);
@@ -116,21 +121,21 @@ function buildRgbCube() {
 
     // Base du cube
     axes.add(createAxisLine(new THREE.Vector3(-0.5, -0.5, -0.5), new THREE.Vector3(0.5, -0.5, -0.5), new THREE.Color(0, 0, 0), new THREE.Color(1, 0, 0)));
-    axes.add(createAxisLine(new THREE.Vector3(-0.5, -0.5, -0.5), new THREE.Vector3(-0.5, -0.5, 0.5), new THREE.Color(0, 0, 0), new THREE.Color(0, 1, 0)));
-    axes.add(createAxisLine(new THREE.Vector3(-0.5, -0.5, 0.5), new THREE.Vector3(0.5, -0.5, 0.5), new THREE.Color(0, 1, 0), new THREE.Color(1, 1, 0)));
-    axes.add(createAxisLine(new THREE.Vector3(0.5, -0.5, -0.5), new THREE.Vector3(0.5, -0.5, 0.5), new THREE.Color(1, 0, 0), new THREE.Color(1, 1, 0)));
+    axes.add(createAxisLine(new THREE.Vector3(-0.5, -0.5, -0.5), new THREE.Vector3(-0.5, 0.5, -0.5), new THREE.Color(0, 0, 0), new THREE.Color(0, 1, 0)));
+    axes.add(createAxisLine(new THREE.Vector3(-0.5, 0.5, -0.5), new THREE.Vector3(0.5, 0.5, -0.5), new THREE.Color(0, 1, 0), new THREE.Color(1, 1, 0)));
+    axes.add(createAxisLine(new THREE.Vector3(0.5, -0.5, -0.5), new THREE.Vector3(0.5, 0.5, -0.5), new THREE.Color(1, 0, 0), new THREE.Color(1, 1, 0)));
 
     // Sommet du cube
-    axes.add(createAxisLine(new THREE.Vector3(-0.5, 0.5, -0.5), new THREE.Vector3(0.5, 0.5, -0.5), new THREE.Color(0, 0, 1), new THREE.Color(1, 0, 1)));
-    axes.add(createAxisLine(new THREE.Vector3(-0.5, 0.5, -0.5), new THREE.Vector3(-0.5, 0.5, 0.5), new THREE.Color(0, 0, 1), new THREE.Color(0, 1, 1)));
+    axes.add(createAxisLine(new THREE.Vector3(-0.5, -0.5, 0.5), new THREE.Vector3(0.5, -0.5, 0.5), new THREE.Color(0, 0, 1), new THREE.Color(1, 0, 1)));
+    axes.add(createAxisLine(new THREE.Vector3(-0.5, -0.5, 0.5), new THREE.Vector3(-0.5, 0.5, 0.5), new THREE.Color(0, 0, 1), new THREE.Color(0, 1, 1)));
     axes.add(createAxisLine(new THREE.Vector3(-0.5, 0.5, 0.5), new THREE.Vector3(0.5, 0.5, 0.5), new THREE.Color(0, 1, 1), new THREE.Color(1, 1, 1)));
-    axes.add(createAxisLine(new THREE.Vector3(0.5, 0.5, -0.5), new THREE.Vector3(0.5, 0.5, 0.5), new THREE.Color(1, 0, 1), new THREE.Color(1, 1, 1)));
+    axes.add(createAxisLine(new THREE.Vector3(0.5, -0.5, 0.5), new THREE.Vector3(0.5, 0.5, 0.5), new THREE.Color(1, 0, 1), new THREE.Color(1, 1, 1)));
 
     // Arêtes du cube
-    axes.add(createAxisLine(new THREE.Vector3(-0.5, -0.5, -0.5), new THREE.Vector3(-0.5, 0.5, -0.5), new THREE.Color(0, 0, 0), new THREE.Color(0, 0, 1)));
-    axes.add(createAxisLine(new THREE.Vector3(-0.5, -0.5, 0.5), new THREE.Vector3(-0.5, 0.5, 0.5), new THREE.Color(0, 1, 0), new THREE.Color(0, 1, 1)));
-    axes.add(createAxisLine(new THREE.Vector3(0.5, -0.5, -0.5), new THREE.Vector3(0.5, 0.5, -0.5), new THREE.Color(1, 0, 0), new THREE.Color(1, 0, 1)));
-    axes.add(createAxisLine(new THREE.Vector3(0.5, -0.5, 0.5), new THREE.Vector3(0.5, 0.5, 0.5), new THREE.Color(1, 1, 0), new THREE.Color(1, 1, 1)));
+    axes.add(createAxisLine(new THREE.Vector3(-0.5, -0.5, -0.5), new THREE.Vector3(-0.5, -0.5, 0.5), new THREE.Color(0, 0, 0), new THREE.Color(0, 0, 1)));
+    axes.add(createAxisLine(new THREE.Vector3(-0.5, 0.5, -0.5), new THREE.Vector3(-0.5, 0.5, 0.5), new THREE.Color(0, 1, 0), new THREE.Color(0, 1, 1)));
+    axes.add(createAxisLine(new THREE.Vector3(0.5, -0.5, -0.5), new THREE.Vector3(0.5, -0.5, 0.5), new THREE.Color(1, 0, 0), new THREE.Color(1, 0, 1)));
+    axes.add(createAxisLine(new THREE.Vector3(0.5, 0.5, -0.5), new THREE.Vector3(0.5, 0.5, 0.5), new THREE.Color(1, 1, 0), new THREE.Color(1, 1, 1)));
 
     scene.add(axes);
 }
@@ -140,6 +145,7 @@ function createPointCloud(img) {
         scene.remove(pointCloud);
         scene.remove(overlayMesh.rims);
         scene.remove(overlayMesh.circle);
+        scene.remove(overlayMesh.edges);
         overlayMesh = {};
     }
 
@@ -187,6 +193,11 @@ function createPointCloud(img) {
 function createConvexHullCircles(vertices, faces) {
     if (!vertices || vertices.length === 0) return;
 
+    // On supprime les cercles et les arêtes existants
+    if (overlayMesh.circle) scene.remove(overlayMesh.circle);
+    if (overlayMesh.rims) scene.remove(overlayMesh.rims);
+    if (overlayMesh.edges) scene.remove(overlayMesh.edges);
+
     // Conteneurs pour les cercles, leurs contours et les arêtes
     overlayMesh.circle = new THREE.Object3D();
     overlayMesh.rims = new THREE.Object3D();
@@ -226,9 +237,9 @@ function createConvexHullCircles(vertices, faces) {
 
 
     faces.forEach(face => {
-        const vertex1 = new THREE.Vector3(face[0][0] - 0.5, face[0][1] - 0.5, face[0][2] - 0.5);
-        const vertex2 = new THREE.Vector3(face[1][0] - 0.5, face[1][1] - 0.5, face[1][2] - 0.5);
-        const vertex3 = new THREE.Vector3(face[2][0] - 0.5, face[2][1] - 0.5, face[2][2] - 0.5);
+        const vertex1 = new THREE.Vector3(vertices[face[0]][0] -0.5, vertices[face[0]][1] -0.5, vertices[face[0]][2] -0.5);
+        const vertex2 = new THREE.Vector3(vertices[face[1]][0] -0.5, vertices[face[1]][1] -0.5, vertices[face[1]][2] -0.5);
+        const vertex3 = new THREE.Vector3(vertices[face[2]][0] -0.5, vertices[face[2]][1] -0.5, vertices[face[2]][2] -0.5);
 
         // Ajouter des arêtes (lignes entre les vertices)
         addEdgeToScene(vertex1, vertex2);
