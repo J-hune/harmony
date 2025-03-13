@@ -4,8 +4,8 @@ import numpy as np
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 
+from image_decomposition import decompose_image
 from palette_simplification import simplify_convex_palette
-from plot import plot_palette, plot_convex_hull_3d
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -51,14 +51,18 @@ def handle_upload_image(data):
         return
 
     # Traitement : conversion en RGB et extraction des pixels normalisés
-    pixels = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).reshape(-1, 3) / 255.0
+    pixels = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) / 255.0
 
-    # Calcul de l'enveloppe convexe
+    # On calcule la palette simplifiée
     palette = simplify_convex_palette(pixels, 6)
     vertices = palette['vertices']
     faces = palette['faces']
 
+    # On envoie les données au client
     emit('convex_hull', {'vertices': vertices.tolist(), 'faces': faces.tolist()})
+
+    # On décompose l'image en couches pondérées selon la palette de couleurs
+    decompose_image(pixels, vertices)
 
 
 if __name__ == '__main__':

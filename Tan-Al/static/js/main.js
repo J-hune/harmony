@@ -36,22 +36,37 @@ function initSocket() {
         createConvexHullCircles(data.vertices, data.faces);
     });
 
+    socket.on('intermediate_image', (data) => {
+        console.log('Image intermédiaire reçue du serveur');
+
+        let imageBase64 = data.image_data;
+        let imageUrl = 'data:image/png;base64,' + imageBase64;
+
+        let img = new Image();
+        img.src = imageUrl;
+
+        const outputImage = document.getElementById("output-image");
+        outputImage.appendChild(img);
+    });
+
     socket.on('error', (data) => {
         console.error('Erreur reçue du serveur :', data.message);
     });
 }
 
 function init3D() {
+    const container = document.getElementById('webgl-output');
+
     // Initialisation de la scène, caméra et renderer
     scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 100);
     camera.position.set(1, 1, 1);
 
     renderer = new THREE.WebGLRenderer({antialias: true});
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-    document.body.appendChild(renderer.domElement);
+    container.appendChild(renderer.domElement);
 
     // Contrôles orbitaux
     controls = new OrbitControls(camera, renderer.domElement);
@@ -71,6 +86,10 @@ function init3D() {
     document.getElementById("upload").addEventListener("change", (e) => {
         const file = e.target.files[0];
         if (file) {
+            // On vide le conteneur de l'image précédente
+            const outputImage = document.getElementById("output-image");
+            outputImage.innerHTML = '';
+
             const reader = new FileReader();
             reader.onload = (event) => {
                 // Envoi de l'image encodée en base64 via Socket.IO
@@ -237,14 +256,11 @@ function createConvexHullCircles(vertices, faces) {
 
 
     faces.forEach(face => {
-        const vertex1 = new THREE.Vector3(vertices[face[0]][0] -0.5, vertices[face[0]][1] -0.5, vertices[face[0]][2] -0.5);
-        const vertex2 = new THREE.Vector3(vertices[face[1]][0] -0.5, vertices[face[1]][1] -0.5, vertices[face[1]][2] -0.5);
-        const vertex3 = new THREE.Vector3(vertices[face[2]][0] -0.5, vertices[face[2]][1] -0.5, vertices[face[2]][2] -0.5);
-
-        // Ajouter des arêtes (lignes entre les vertices)
-        addEdgeToScene(vertex1, vertex2);
-        addEdgeToScene(vertex2, vertex3);
-        addEdgeToScene(vertex3, vertex1);
+        for (let i = 0; i < face.length; i++) {
+            const vertex1 = new THREE.Vector3(vertices[face[i]][0] - 0.5, vertices[face[i]][1] - 0.5, vertices[face[i]][2] - 0.5);
+            const vertex2 = new THREE.Vector3(vertices[face[(i + 1) % face.length]][0] - 0.5, vertices[face[(i + 1) % face.length]][1] - 0.5, vertices[face[(i + 1) % face.length]][2] - 0.5);
+            addEdgeToScene(vertex1, vertex2);
+        }
     });
 
     // Fonction pour ajouter une arête
@@ -265,9 +281,10 @@ function createConvexHullCircles(vertices, faces) {
 
 
 function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
+    const container = document.getElementById('webgl-output');
+    camera.aspect = container.clientWidth / container.clientHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(container.clientWidth, container.clientHeight);
 }
 
 function animate() {
