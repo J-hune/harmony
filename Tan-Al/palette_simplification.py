@@ -4,6 +4,8 @@ import cvxopt
 import cvxopt.solvers
 from flask_socketio import emit
 
+from plot import send_intermediate_image
+
 
 def compute_rmse(points, hull_points):
     """
@@ -44,10 +46,10 @@ def convert_convex_hull_faces(hull):
       - Une liste de faces (chaque face est une liste d'indices)
     """
     hull_vertices_coords = hull.points[hull.vertices]
-    # On crée un tableau qui associe à chaque sommet sa nouvelle position dans l'enveloppe.
+
+    # On ré-indexe les faces générées par ConvexHull.
     new_indices = -1 * np.ones(hull.points.shape[0], dtype=np.int32)
     new_indices[hull.vertices] = np.arange(len(hull.vertices))
-    # On ré-indexe les faces générées par ConvexHull.
     faces = np.asarray([new_indices[face] for face in hull.simplices])
 
     # On parcourt chaque face pour vérifier et ajuster son orientation.
@@ -291,13 +293,14 @@ def simplify_convex_palette(points, target_vertices=10, max_iterations=500):
           'faces'   : liste de faces (chaque face est un triplet d'indices)
     """
     # On calcule l'enveloppe convexe initiale à partir des points fournis.
-    initial_hull = ConvexHull(points.reshape((-1, 3)))
+    points = points.reshape(-1, 3)
+    initial_hull = ConvexHull(points)
     current_vertices = points[initial_hull.vertices]
     current_faces = np.array(convert_convex_hull_faces(initial_hull))
 
     # On émet l'enveloppe convexe initiale via SocketIO pour visualisation.
-    msg = {'vertices': current_vertices.tolist(), 'faces': current_faces.tolist()}
-    emit('convex_hull', msg)
+    emit('convex_hull', {'vertices': current_vertices.tolist(), 'faces': current_faces.tolist()})
+    send_intermediate_image(np.array([np.array(current_vertices)]), fixed_width=400, fixed_height=80)
 
     iteration = 0
     while iteration < max_iterations and len(current_vertices) > target_vertices:
@@ -337,12 +340,13 @@ def simplify_convex_palette(points, target_vertices=10, max_iterations=500):
             break
 
         # On restreint les valeurs des sommets pour qu'elles restent dans l'intervalle [0,1].
-        current_vertices = np.clip(current_vertices, 0, 1)
+        """current_vertices = np.clip(current_vertices, 0, 1)
 
         # Si le nombre de sommets est faible, on vérifie la qualité de la simplification via RMSE.
         if len(current_vertices) <= 20:
             rmse = compute_rmse(points, current_vertices)
             if rmse > 2 / 255:
-                break
+                break"""
 
+    send_intermediate_image(np.array([np.array(current_vertices)]), fixed_width=400, fixed_height=80)
     return {'vertices': current_vertices, 'faces': current_faces}
