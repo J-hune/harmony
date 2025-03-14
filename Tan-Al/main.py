@@ -54,6 +54,10 @@ def handle_upload_image(data):
     # Traitement : conversion en RGB et extraction des pixels normalisés
     pixels = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) / 255.0
 
+    # On vérifie si le client est toujours connecté pour éviter de calculer dans le vide
+    if request.sid not in socketio.server.manager.rooms['/']:
+        return
+
     # On calcule la palette simplifiée
     palette = simplify_convex_palette(pixels, 6)
     vertices = palette['vertices']
@@ -61,6 +65,10 @@ def handle_upload_image(data):
 
     # On envoie les données au client
     emit('convex_hull', {'vertices': vertices.tolist(), 'faces': faces.tolist()})
+
+    # On vérifie si le client est toujours connecté pour éviter de calculer dans le vide
+    if request.sid not in socketio.server.manager.rooms['/']:
+        return
 
     # On décompose l'image en couches pondérées selon la palette de couleurs
     decompose_image(pixels, vertices)
