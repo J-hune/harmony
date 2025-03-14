@@ -18,12 +18,16 @@
 
 /* Handle */
 ::-webkit-scrollbar-thumb {
-    background: #b5b5b5;
+    background: #8d8d8d;
     border-radius: 6px;
 }
 
 /* Handle on hover */
 ::-webkit-scrollbar-thumb:hover {
+    background: #b5b5b5;
+}
+
+::-webkit-scrollbar-thumb:active {
     background: #c270c2;
 }
 
@@ -126,6 +130,7 @@ body {
 .previews-container img {
     width: 100%;
     border-radius: 12px;
+    cursor: pointer;
 }
 
 .palettes-container {
@@ -135,7 +140,9 @@ body {
 }
 
 .palettes-container img {
+    border-radius: 2px;
     width: 100%;
+    cursor: pointer;
 }
 
 .layers-container {
@@ -147,19 +154,24 @@ body {
 .layers-container img {
     width: 100%;
     border-radius: 6px;
+    cursor: pointer;
 }
 
 #upload {
     width: 100%;
 }
 
-#terminal {
+.terminal-container {
+    padding: 14px 8px 14px 14px;
     background: #000;
-    color: #0f0;
-    font-family: monospace;
-    padding: 14px 12px;
     height: 150px;
     border-radius: 6px 0 0 0;
+}
+
+#terminal {
+    color: #0f0;
+    font-family: monospace;
+    height: 100%;
     overflow-y: auto;
 }
 
