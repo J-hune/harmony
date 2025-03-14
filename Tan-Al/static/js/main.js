@@ -10,6 +10,8 @@ import {io} from "socket.io";
 let scene, camera, renderer, controls, pointCloud;
 let overlayMesh = {};
 let stats, socket;
+let thinkingInterval = null;
+let thinkingElement = null;
 
 // Initialisations principales
 init3D();
@@ -27,8 +29,46 @@ function logMessage(message, type = 'info') {
     const p = document.createElement('p');
     p.textContent = message;
     if (type === 'error') p.style.color = 'red';
-    terminal.appendChild(p);
+
+    // On cherche si un thinking-indicator est présent pour placer le message avant
+    const thinkingIndicator = document.getElementById('thinking-indicator');
+    if (thinkingIndicator) {
+        terminal.insertBefore(p, thinkingIndicator);
+    } else {
+        terminal.appendChild(p);
+    }
     terminal.scrollTop = terminal.scrollHeight;
+}
+
+/**
+ * Démarre l'animation du spinner.
+ */
+function startThinking() {
+    if (thinkingElement) return;
+    thinkingElement = document.createElement('p');
+    thinkingElement.id = 'thinking-indicator';
+    thinkingElement.textContent = '‎';
+    document.getElementById('terminal').appendChild(thinkingElement);
+    let states = ["▹▹▹▹▹", "▸▹▹▹▹", "▹▸▹▹▹", "▹▹▸▹▹", "▹▹▹▸▹", "▹▹▹▹▸"]
+    let index = 0;
+    thinkingInterval = setInterval(() => {
+        index = (index + 1) % states.length;
+        thinkingElement.textContent = states[index];
+    }, 120);
+}
+
+/**
+ * Arrête l'animation du spinner
+ */
+function stopThinking() {
+    if (thinkingInterval) {
+        clearInterval(thinkingInterval);
+        thinkingInterval = null;
+    }
+    if (thinkingElement) {
+        thinkingElement.parentNode.removeChild(thinkingElement);
+        thinkingElement = null;
+    }
 }
 
 /**
@@ -50,6 +90,11 @@ function initSocket() {
             console.log('Message du serveur :', msg.data);
             logMessage('Message du serveur : ' + msg.data);
         }
+    });
+
+    socket.on('thinking', (data) => {
+        if (data.thinking) startThinking();
+        else stopThinking();
     });
 
     socket.on('server_log', (msg) => {

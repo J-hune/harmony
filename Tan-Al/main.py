@@ -33,6 +33,7 @@ def handle_upload_image(data):
     """
     Attendu : data contient une clé "image_data" qui correspond à l'image encodée en base64.
     """
+    emit('thinking', {'thinking': True})
     img_data = data.get('image_data')
     if not img_data:
         emit('error', {'message': 'Aucune donnée image fournie'})
@@ -63,6 +64,7 @@ def handle_upload_image(data):
 
     # On décompose l'image en couches pondérées selon la palette de couleurs
     decompose_image(pixels, vertices)
+    emit('thinking', {'thinking': False})
 
 
 if __name__ == '__main__':
