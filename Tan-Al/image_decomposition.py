@@ -159,9 +159,9 @@ def decompose_image(image, palette):
         # Vectorisation : reshape des poids pour former une image 2D puis multiplication par la couleur
         layer = weights[:, i].reshape(height, width, 1) * palette[i]
         recomposed_image += layer
-        send_intermediate_image(layer)
+        send_intermediate_image(layer, "layers")
 
-    send_intermediate_image(recomposed_image)
+    send_intermediate_image(recomposed_image, "previews")
 
     plt.axis('off')
     plt.tight_layout()

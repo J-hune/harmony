@@ -51,7 +51,7 @@ def plot_palette(colors, fixed_width=400, fixed_height=80):
     plt.show()
 
 
-def send_intermediate_image(image, fixed_width=None, fixed_height=None):
+def send_intermediate_image(image, image_type, fixed_width=None, fixed_height=None):
     # On clamp les valeurs entre 0 et 1
     image = np.clip(image, 0, 1)
     image = (image * 255).astype(np.uint8)
@@ -64,4 +64,4 @@ def send_intermediate_image(image, fixed_width=None, fixed_height=None):
     image_data_base64 = base64.b64encode(img_encoded).decode('utf-8')
 
     # On envoie l'image intermédiaire au client
-    emit('intermediate_image', {'image_data': image_data_base64})
+    emit('intermediate_image', {'image_data': image_data_base64, 'type': image_type})
