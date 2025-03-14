@@ -1,7 +1,6 @@
 import numpy as np
 from scipy.sparse import coo_matrix
 from scipy.spatial import ConvexHull, Delaunay
-import matplotlib.pyplot as plt
 
 from plot import send_intermediate_image
 
@@ -28,88 +27,90 @@ def convert_rgb_to_rgbxy(image):
 
 def delaunay_barycentrics(vertices, points):
     """
-    Calcule les poids barycentriques pour chaque point via la triangulation de Delaunay.
-
-    Paramètres :
-        vertices : tableau NumPy de forme (n_vertices, d) représentant les sommets de l'enveloppe convexe.
-        points   : tableau NumPy de forme (n_points, d) pour lesquels on souhaite calculer les coordonnées barycentriques.
-
-    Retourne :
-        Une matrice creuse CSR de forme (n_points, n_vertices) contenant les poids barycentriques.
+    Calcule les poids barycentriques dans l'espace défini par 'vertices' pour chaque point de 'points'
+    en utilisant la triangulation de Delaunay.
+    Pour les points extérieurs (simplex == -1), on attribue un poids 1 pour le sommet le plus proche.
+    Retourne une matrice creuse (CSR) de forme (n_points, n_vertices).
     """
-    # Calcul de la triangulation de Delaunay
     tri = Delaunay(vertices)
-
-    # Pour chaque point, trouver l'indice du simplex (simplexe) qui le contient (ou -1 s'il n'est pas contenu)
     simplex_indices = tri.find_simplex(points, tol=1e-6)
 
-    # Vérification que tous les points se trouvent à l'intérieur de l'enveloppe convexe
-    assert (simplex_indices != -1).all(), "Certains points sont en dehors de l'enveloppe convexe."
+    valid = np.where(simplex_indices != -1)[0]
+    invalid = np.where(simplex_indices == -1)[0]
 
-    # Transformation affine associée à chaque simplex contenant le point
-    transform = tri.transform[simplex_indices, :points.shape[1]]
+    row_indices_list = []
+    col_indices_list = []
+    vals_list = []
 
-    # Décalage de chaque point par rapport à l'origine de son simplex
-    delta = points - tri.transform[simplex_indices, points.shape[1]]
+    if valid.size > 0:
+        # Calcul pour les points valides
+        transform_valid = tri.transform[simplex_indices[valid], :points.shape[1]]
+        delta_valid = points[valid] - tri.transform[simplex_indices[valid], points.shape[1]]
+        bary_partial = np.einsum('...jk,...k->...j', transform_valid, delta_valid)
+        bary_valid = np.c_[bary_partial, 1 - bary_partial.sum(axis=1)]
 
-    # Calcul des coordonnées barycentriques (hors dernier coefficient)
-    bary_partial = np.einsum('...jk,...k->...j', transform, delta)
-    bary_coords = np.c_[bary_partial, 1 - bary_partial.sum(axis=1)]
+        # Les indices des sommets du simplex pour chaque point valide
+        simplices_valid = tri.simplices[simplex_indices[valid]]
 
-    # Construction de la matrice creuse
-    row_indices = np.tile(np.arange(len(points)).reshape(-1, 1), (1, len(tri.simplices[0]))).ravel()
-    col_indices = tri.simplices[simplex_indices].ravel()
-    vals = bary_coords.ravel()
+        row_indices_valid = np.repeat(valid, simplices_valid.shape[1])
+        col_indices_valid = simplices_valid.ravel()
+        vals_valid = bary_valid.ravel()
+
+        row_indices_list.append(row_indices_valid)
+        col_indices_list.append(col_indices_valid)
+        vals_list.append(vals_valid)
+
+    if invalid.size > 0:
+        # Pour chaque point invalide, on choisit le sommet le plus proche
+        for idx in invalid:
+            distances = np.linalg.norm(points[idx] - vertices, axis=1)
+            nearest = np.argmin(distances)
+            row_indices_list.append(np.array([idx]))
+            col_indices_list.append(np.array([nearest]))
+            vals_list.append(np.array([1.0]))
+
+    row_indices = np.concatenate(row_indices_list)
+    col_indices = np.concatenate(col_indices_list)
+    vals = np.concatenate(vals_list)
 
     return coo_matrix((vals, (row_indices, col_indices)), shape=(len(points), len(vertices))).tocsr()
 
 
 def star_barycentrics(palette, hull_colors):
     """
-    Calcule les coordonnées barycentriques pour les couleurs extraites de l'enveloppe convexe,
-    en utilisant une triangulation en étoile ("star triangulation") basée sur un vertex pivot.
-
-    Paramètres :
-        palette     : tableau NumPy de forme (n_palette, 3) représentant les couleurs de référence.
-        hull_colors : tableau NumPy de forme (n_hull, 3) représentant les couleurs extraites de l'enveloppe convexe.
-
-    Retourne :
-        Un tableau NumPy de forme (n_hull, n_palette) contenant les poids barycentriques.
+    Calcule les poids barycentriques pour les couleurs extraites de l'enveloppe convexe
+    en utilisant une triangulation en étoile basée sur un pivot.
+    Si aucun simplexe ne fournit des poids valides pour un point, on attribue des poids uniformes.
     """
-    # Sélection du vertex pivot (le plus proche de l'origine)
+    # Choix du pivot : ici, la couleur la plus proche de l'origine (0,0,0)
     pivot_index = np.argmin(np.linalg.norm(palette, axis=1))
 
-    # Construction de l'enveloppe convexe des couleurs de la palette
+    # Calcul de l'enveloppe convexe sur la palette
     convex_hull = ConvexHull(palette)
-
-    # Création des simplexes en étoile en combinant le pivot avec chaque face qui ne le contient pas
+    # Construction des simplexes en étoile (en excluant ceux contenant le pivot)
     simplices = [[pivot_index] + list(face) for face in convex_hull.simplices if pivot_index not in face]
 
-    # Initialisation du tableau des coordonnées barycentriques avec des valeurs négatives
+    # Initialisation des poids à -1
     bary_coords = -np.ones((hull_colors.shape[0], palette.shape[0]))
 
-    # Calcul pour chaque simplexe
     for simplex in simplices:
-        # Le pivot est le premier élément du simplexe
         pivot = palette[simplex[0]]
-        # Matrice du système pour les autres sommets du simplexe
         A = (palette[simplex[1:]] - pivot).T
-        # Terme constant pour tous les hull_colors
         b = (hull_colors - pivot).T
         try:
-            # Résolution du système linéaire pour obtenir les poids des sommets non pivot
             bary_partial = np.linalg.solve(A, b).T
         except np.linalg.LinAlgError:
-            continue  # Si le système est singulier, on passe au simplexe suivant
-
-        # Ajout du poids du pivot : 1 - somme des autres poids
+            continue  # Passer au simplexe suivant en cas d'erreur
         bary = np.hstack((1 - bary_partial.sum(axis=1, keepdims=True), bary_partial))
-
-        # Détection des points pour lesquels les coordonnées sont valides (>= 0)
         valid_mask = (bary >= 0).all(axis=1)
-        # Mise à zéro pour ces points, puis affectation des poids pour les indices du simplexe
+        # On affecte les poids calculés pour les points valides
         bary_coords[valid_mask] = 0.0
         bary_coords[np.ix_(valid_mask, simplex)] = bary[valid_mask]
+
+    # Pour les points n'ayant pas obtenu de solution (négatifs), on attribue des poids uniformes
+    invalid = np.any(bary_coords < 0, axis=1)
+    if np.any(invalid):
+        bary_coords[invalid] = 1.0 / palette.shape[0]
 
     return bary_coords
 
@@ -117,18 +118,13 @@ def star_barycentrics(palette, hull_colors):
 def decompose_image(image, palette):
     """
     Décompose une image en couches pondérées selon une palette de couleurs.
-
     Le procédé consiste à :
-      1. Convertir l'image en un tableau de pixels avec coordonnées (R, G, B, X, Y).
+      1. Convertir l'image en un tableau de pixels avec coordonnées RGBXY.
       2. Calculer l'enveloppe convexe dans cet espace.
-      3. Extraire les points de l'enveloppe convexe et récupérer leurs valeurs RGB.
-      4. Calculer les poids barycentriques via une triangulation de Delaunay dans l'espace RGBXY.
-      5. Calculer les poids barycentriques pour les couleurs de l'enveloppe convexe via une triangulation en étoile.
-      6. Combiner ces poids pour reconstituer l'image en couches associées à chaque couleur de la palette.
-
-    Paramètres :
-        image   : tableau NumPy de forme (hauteur, largeur, 3) représentant l'image.
-        palette : tableau NumPy de forme (n_palette, 3) représentant la palette de couleurs.
+      3. Extraire les couleurs RGB associées aux points de l'enveloppe.
+      4. Calculer les poids barycentriques robustes dans l'espace RGBXY via Delaunay.
+      5. Calculer les poids barycentriques via une triangulation en étoile.
+      6. Combiner ces poids pour reconstituer l'image en couches.
     """
     # Conversion de l'image en tableau de pixels RGBXY
     rgbxy_pixels = convert_rgb_to_rgbxy(image)
@@ -143,7 +139,7 @@ def decompose_image(image, palette):
     y_coords = hull_points[:, 4].astype(int)
     hull_colors = image[y_coords, x_coords]
 
-    # Calcul des poids barycentriques dans l'espace RGBXY par Delaunay
+    # Calcul des poids barycentriques dans l'espace RGBXY de manière robuste
     weights_rgbxy = delaunay_barycentrics(rgbxy_pixels[hull_indices], rgbxy_pixels)
 
     # Calcul des poids barycentriques pour les couleurs de l'enveloppe convexe par triangulation en étoile
@@ -152,13 +148,19 @@ def decompose_image(image, palette):
     # Combinaison des poids pour obtenir, pour chaque pixel, des poids pour chaque couleur de la palette
     weights = weights_rgbxy.dot(weights_palette)
 
-    # Recomposition de l'image en sommant les couches pondérées par la palette
+    # Normalisation des poids pour chaque pixel (éviter que la somme soit nulle ou déviant de 1)
+    sum_weights = np.array(weights.sum(axis=1)).flatten()
+    sum_weights[sum_weights == 0] = 1  # éviter la division par zéro
+    weights = (weights.T / sum_weights).T.clip(0, 1)
+
+    # Reconstruction de l'image en sommant les couches pondérées par la palette
     height, width, _ = image.shape
     recomposed_image = np.zeros_like(image, dtype=float)
     for i in range(palette.shape[0]):
-        # Vectorisation : reshape des poids pour former une image 2D puis multiplication par la couleur
+        # Calcul de la couche correspondant à la couleur i
         layer = weights[:, i].reshape(height, width, 1) * palette[i]
         recomposed_image += layer
         send_intermediate_image(layer, "layers")
 
     send_intermediate_image(recomposed_image, "previews")
+    return recomposed_image
