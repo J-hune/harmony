@@ -162,8 +162,3 @@ def decompose_image(image, palette):
         send_intermediate_image(layer, "layers")
 
     send_intermediate_image(recomposed_image, "previews")
-
-    plt.axis('off')
-    plt.tight_layout()
-    plt.imshow(recomposed_image)
-    plt.show()
