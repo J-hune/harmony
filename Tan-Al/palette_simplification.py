@@ -300,7 +300,7 @@ def simplify_convex_palette(points, target_vertices=10, max_iterations=500):
 
     # On émet l'enveloppe convexe initiale via SocketIO pour visualisation.
     emit('convex_hull', {'vertices': current_vertices.tolist(), 'faces': current_faces.tolist()})
-    send_intermediate_image(np.array([np.array(current_vertices)]), fixed_width=400, fixed_height=80)
+    send_intermediate_image(np.array([np.array(current_vertices)]), "palettes", fixed_width=400, fixed_height=60)
 
     iteration = 0
     while iteration < max_iterations and len(current_vertices) > target_vertices:
@@ -348,5 +348,5 @@ def simplify_convex_palette(points, target_vertices=10, max_iterations=500):
             if rmse > 2 / 255:
                 break"""
 
-    send_intermediate_image(np.array([np.array(current_vertices)]), fixed_width=400, fixed_height=80)
+    send_intermediate_image(np.array([np.array(current_vertices)]), "palettes", fixed_width=400, fixed_height=60)
     return {'vertices': current_vertices, 'faces': current_faces}
