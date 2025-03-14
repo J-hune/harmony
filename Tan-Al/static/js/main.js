@@ -203,6 +203,22 @@ function initWebFeatures() {
     const input = document.getElementById('upload');
     const area = document.getElementById('drag-area');
 
+    document.body.addEventListener('click', (e) => {
+        // Si on clique sur une image, on propose de la télécharger (en full size)
+        if (e.target.tagName === 'IMG') {
+            const a = document.createElement('a');
+            a.href = e.target.src;
+            a.download = new Date().toISOString() + '.png';
+            a.click();
+
+            // On empêche le navigateur de suivre le lien
+            e.preventDefault();
+
+            // On supprime le lien après le téléchargement
+            a.remove();
+        }
+    });
+
     area.addEventListener('click', () => input.click());
 
     area.addEventListener('dragover', (e) => {
