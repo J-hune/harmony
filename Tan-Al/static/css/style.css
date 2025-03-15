@@ -123,6 +123,15 @@ body {
     margin-block-end: 0.8em;
 }
 
+#terminal-slider {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 164px;
+    height: 10px;
+    background: transparent;
+    cursor: ns-resize;
+}
 
 .drag-area {
     display: flex;
@@ -172,12 +181,14 @@ body {
     width: 100%;
     border-radius: 12px;
     cursor: pointer;
+    box-shadow: rgba(23, 26, 33, 0.7) 0 1px 4px;
 }
 
 .previews-container canvas {
     width: 100%;
     border-radius: 12px;
     cursor: pointer;
+    box-shadow: rgba(23, 26, 33, 0.7) 0 1px 4px;
 }
 
 .palettes-container {

@@ -34,8 +34,8 @@
 
         <h3 class="hidden" id="previews-title">Prévisualisation</h3>
         <div class="hidden previews-container" id="previews-container">
-            <img id="original-image"  alt="Image originale" src="">
-            <canvas id="harmonized-image"></canvas>
+            <img id="original-image" class="hidden" alt="Image originale" src="">
+            <canvas id="harmonized-image" class="hidden"></canvas>
         </div>
 
         <h3 class="hidden" id="palettes-title">Palettes avant et après simplification</h3>
@@ -65,11 +65,12 @@
     </div>
     <div class="content">
         <div id="webgl-output"></div>
-        <div class="terminal-container">
+        <div id="terminal-container" class="terminal-container">
             <div id="terminal">
                 <!-- Les messages de la console apparaîtront ici -->
             </div>
         </div>
+        <div id="terminal-slider"></div>
     </div>
 </div>
 <script type="module" src="../static/js/main.js"></script>
