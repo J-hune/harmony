@@ -10,7 +10,7 @@ let socket;
 const threeSceneManager = new ThreeSceneManager();
 const paletteManager = new PaletteManager();
 const layerManager = new LayerManager();
-const terminalManager = new TerminalManager();
+const terminalManager = new TerminalManager(threeSceneManager);
 
 // Initialisation des managers et de la connexion Socket.IO
 threeSceneManager.init();
@@ -97,7 +97,7 @@ function reset() {
 
     // On cache les éléments HTML
     const idsToHide = [
-        "previews-title", "previews-container",
+        "previews-title", "previews-container", "original-image", "harmonized-image",
         "palettes-title", "initial-palette", "simplified-palette", "download-palettes",
         "layers-title", "layers-container", "download-layers"
     ];
@@ -140,6 +140,7 @@ function onImageUpload(file) {
         const img = new Image();
         img.onload = () => {
             // On affiche le titre et le conteneur de prévisualisation
+            originalImage.classList.remove('hidden');
             document.getElementById("previews-title").classList.remove('hidden');
             document.getElementById("previews-container").classList.remove('hidden');
 

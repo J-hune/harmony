@@ -122,6 +122,7 @@ class LayerManager {
         this.harmonizedImage.height = this.height;
         const ctx = this.harmonizedImage.getContext('2d');
         ctx.putImageData(imageData, 0, 0);
+        this.harmonizedImage.classList.remove('hidden');
     }
 
     /**
