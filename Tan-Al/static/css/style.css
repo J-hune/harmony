@@ -179,10 +179,15 @@ body {
     gap: 28px;
 }
 
-.palettes-container img {
+.palettes-container > div {
+    display: flex;
     border-radius: 2px;
+    overflow: clip;
+}
+
+.palettes-container > div div {
+    height: 40px;
     width: 100%;
-    cursor: pointer;
 }
 
 .layers-container {

@@ -8,6 +8,7 @@ import {io} from "socket.io";
 
 // Variables globales
 let scene, camera, renderer, controls, pointCloud;
+let initialPalette = [], simplifiedPalette = [];
 let overlayMesh = {};
 let stats, socket;
 let thinkingInterval = null;
@@ -98,18 +99,16 @@ function initSocket() {
     });
 
     socket.on('server_log', (msg) => {
-        console.log('Log du serveur :', msg.data);
         logMessage('Log du serveur : ' + msg.data);
     });
 
     socket.on('convex_hull', (data) => {
-        console.log(`Chargement des sommets de l'enveloppe convexe contenant ${data.vertices.length} sommets...`);
         logMessage(`Chargement des sommets de l'enveloppe convexe contenant ${data.vertices.length} sommets...`);
         createConvexHullCircles(data.vertices, data.faces);
+        createPalette(data.type, data.vertices);
     });
 
     socket.on('intermediate_image', (data) => {
-        console.log(`Image de type ${data.type} reçue du serveur`);
         logMessage(`Image de type ${data.type} reçue du serveur`);
 
         const imageUrl = 'data:image/png;base64,' + data.image_data;
@@ -133,7 +132,7 @@ function initSocket() {
  * Réinitialise l'affichage des prévisualisations et enlève les éléments 3D précédents.
  */
 function reset() {
-    const ids = ["previews", "palettes", "layers"];
+    const ids = ["previews", "initial-palette", "simplified-palette", "layers"];
     ids.forEach(id => {
         const title = document.getElementById(`${id}-title`);
         const container = document.getElementById(`${id}-container`);
@@ -455,6 +454,37 @@ function createConvexHullCircles(vertices, faces) {
     scene.add(overlayMesh.circle);
     scene.add(overlayMesh.rims);
     scene.add(overlayMesh.edges);
+}
+
+function createPalette(type, vertices) {
+    // Affiche le titre et le conteneur de prévisualisation
+    document.getElementById("palettes-title").classList.remove('preview-hidden');
+    document.getElementById("initial-palette").classList.remove('preview-hidden');
+    document.getElementById("simplified-palette").classList.remove('preview-hidden');
+
+    if (type === 'initial') {
+        initialPalette = vertices.map(v => [Math.round(v[0] * 255), Math.round(v[1] * 255), Math.round(v[2] * 255)]);
+
+        // On crée une div pour chaque couleur de la palette
+        const paletteContainer = document.getElementById('initial-palette');
+        paletteContainer.innerHTML = '';
+        initialPalette.forEach(color => {
+            const div = document.createElement('div');
+            div.style.backgroundColor = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+            paletteContainer.appendChild(div);
+        });
+    } else if (type === 'simplified') {
+        simplifiedPalette = vertices.map(v => [Math.round(v[0] * 255), Math.round(v[1] * 255), Math.round(v[2] * 255)]);
+
+        // On crée une div pour chaque couleur de la palette
+        const paletteContainer = document.getElementById('simplified-palette');
+        paletteContainer.innerHTML = '';
+        simplifiedPalette.forEach(color => {
+            const div = document.createElement('div');
+            div.style.backgroundColor = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+            paletteContainer.appendChild(div);
+        });
+    }
 }
 
 /**

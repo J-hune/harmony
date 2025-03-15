@@ -64,7 +64,7 @@ def handle_upload_image(data):
     faces = palette['faces']
 
     # On envoie les données au client
-    emit('convex_hull', {'vertices': vertices.tolist(), 'faces': faces.tolist()})
+    emit('convex_hull', {'type':'simplified', 'vertices': vertices.tolist(), 'faces': faces.tolist()})
 
     # On vérifie si le client est toujours connecté pour éviter de calculer dans le vide
     if request.sid not in socketio.server.manager.rooms['/']:
