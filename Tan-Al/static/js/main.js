@@ -88,9 +88,8 @@ function reset() {
         const container = document.getElementById(id);
         if (container && !doNotRemoveLast.includes(id)) container.innerHTML = '';
         else if (container && doNotRemoveLast.includes(id)) {
-            const lastChild = container.lastElementChild;
             while (container.childElementCount > 1) {
-                if (container.lastElementChild !== lastChild) container.removeChild(container.lastElementChild);
+                container.removeChild(container.firstElementChild);
             }
         }
     });
