@@ -87,6 +87,9 @@ class TerminalManager {
             index = (index + 1) % states.length;
             this.thinkingElement.textContent = states[index];
         }, 120);
+
+        // On défile pour afficher le spinner
+        this.terminal.scrollTop = this.terminal.scrollHeight
     }
 
     /**
@@ -110,7 +113,7 @@ class TerminalManager {
     resizeTerminal(event) {
         // On calcule la nouvelle position "bottom" du slider
         const sliderBottom = this.startHeight - (event.clientY - this.startY) - this.offsetY;
-        if (sliderBottom < 40) return;
+        if (sliderBottom < 40 || sliderBottom > window.innerHeight - 40) return;
 
         // On met à jour la position du slider
         this.slider.style.bottom = `${sliderBottom}px`;
