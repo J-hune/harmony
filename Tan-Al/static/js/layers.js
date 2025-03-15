@@ -2,11 +2,23 @@ import jszip from "jszip";
 
 class LayerManager {
     constructor() {
+        this.width = 0;
+        this.height = 0;
         this.layers = [];
         this.layersContainer = document.getElementById('layers-container');
         this.downloadButton = document.getElementById('download-layers');
+        this.harmonizedImage = document.getElementById('harmonized-image');
+
         this.downloadButton.addEventListener('click', () => {
             this.download();
+        });
+
+        this.harmonizedImage.addEventListener('click', () => {
+            const a = document.createElement('a');
+            a.href = this.harmonizedImage.toDataURL('image/png');
+            a.download = 'harmonized.png';
+            a.click();
+            a.remove();
         });
     }
 
@@ -82,7 +94,34 @@ class LayerManager {
 
         // On met à jour le canvas
         ctx.putImageData(imageData, 0, 0);
+        this.width = data.width;
+        this.height = data.height;
         this.layers.push(data.weights);
+    }
+
+    /**
+     * Crée ou modifie le canvas représentant la somme des couches
+     */
+    updateSumLayer(simplifiedPalette) {
+        // Pour chaque couche, on multiplie les poids par la couleur de la palette
+        const imageData = new ImageData(this.width, this.height);
+        const data = imageData.data;
+        for (let i = 0; i < this.layers.length; i++) {
+            const color = simplifiedPalette[i];
+            for (let j = 0; j < this.layers[i].length; j++) {
+                const pixelIndex = j * 4;
+                data[pixelIndex] += this.layers[i][j] * color[0];   // Rouge
+                data[pixelIndex + 1] += this.layers[i][j] * color[1]; // Vert
+                data[pixelIndex + 2] += this.layers[i][j] * color[2]; // Bleu
+                data[pixelIndex + 3] += this.layers[i][j] * 255; // Alpha
+            }
+        }
+
+        // On met à jour le canvas
+        this.harmonizedImage.width = this.width;
+        this.harmonizedImage.height = this.height;
+        const ctx = this.harmonizedImage.getContext('2d');
+        ctx.putImageData(imageData, 0, 0);
     }
 
     /**

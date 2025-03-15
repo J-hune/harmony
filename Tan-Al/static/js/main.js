@@ -49,7 +49,7 @@ function initSocket() {
 
     socket.on('convex_hull', (data) => {
         terminalManager.logMessage(`Chargement des sommets de l'enveloppe convexe contenant ${data.vertices.length} sommets...`);
-        threeSceneManager.createConvexHullCircles(data.vertices, data.faces);
+        threeSceneManager.createConvexHullCircles(data.vertices, data.faces, data.type);
 
         // On extrait la palette reçue et on crée les éléments HTML
         paletteManager.create(data.type, data.vertices);
@@ -68,22 +68,8 @@ function initSocket() {
         // Si on a reçu toutes les couches, on affiche le bouton de téléchargement
         if (data.id === simplifiedPalette.length - 1) {
             document.getElementById('download-layers').classList.remove('hidden');
+            layerManager.updateSumLayer(simplifiedPalette);
         }
-    });
-
-    socket.on('intermediate_image', (data) => {
-        terminalManager.logMessage(`Image de type ${data.type} reçue du serveur`);
-
-        const imageUrl = 'data:image/png;base64,' + data.image_data;
-        const img = new Image();
-        img.src = imageUrl;
-
-        const imageContainer = document.getElementById(`${data.type}-container`);
-        imageContainer.appendChild(img);
-
-        // Affiche le titre et le conteneur de prévisualisation
-        document.getElementById(`${data.type}-title`).classList.remove('hidden');
-        document.getElementById(`${data.type}-container`).classList.remove('hidden');
     });
 
     socket.on('error', (data) => {
@@ -96,7 +82,7 @@ function initSocket() {
  */
 function reset() {
     // On vide les conteneurs HTML
-    const idsToEmpty = ["previews-container", "initial-palette", "simplified-palette", "layers-container"];
+    const idsToEmpty = ["initial-palette", "simplified-palette", "layers-container"];
     const doNotRemoveLast = ["layers-container"];
     idsToEmpty.forEach(id => {
         const container = document.getElementById(id);
@@ -120,6 +106,10 @@ function reset() {
         if (element && !element.classList.contains('hidden')) element.classList.add('hidden');
     });
 
+    // On réinitialise l'image originale
+    const originalImage = document.getElementById('original-image');
+    originalImage.src = '';
+
     threeSceneManager.reset();
 }
 
@@ -128,7 +118,7 @@ function reset() {
  * @param {File} file - Fichier image à uploader.
  */
 function onImageUpload(file) {
-    const previewContainer = document.getElementById('previews-container');
+    const originalImage = document.getElementById('original-image');
 
     if (!file) {
         console.error('Aucun fichier sélectionné');
@@ -150,11 +140,10 @@ function onImageUpload(file) {
         const img = new Image();
         img.onload = () => {
             // On affiche le titre et le conteneur de prévisualisation
-            const previewTitle = document.getElementById("previews-title");
-            previewTitle.classList.remove('hidden');
-            previewContainer.classList.remove('hidden');
+            document.getElementById("previews-title").classList.remove('hidden');
+            document.getElementById("previews-container").classList.remove('hidden');
 
-            previewContainer.appendChild(img);
+            originalImage.src = event.target.result;
 
             // On envoie l'image encodée en base64 au serveur via Socket.IO
             socket.emit('upload_image', { image_data: event.target.result });
