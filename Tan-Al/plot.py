@@ -53,8 +53,7 @@ def plot_palette(colors, fixed_width=400, fixed_height=80):
 
 def send_intermediate_image(image, image_type, fixed_width=None, fixed_height=None):
     # On clamp les valeurs entre 0 et 1
-    image = np.clip(image, 0, 1)
-    image = (image * 255).astype(np.uint8)
+    image = image.astype(np.uint8)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
     if fixed_width is not None and fixed_height is not None:

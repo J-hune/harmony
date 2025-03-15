@@ -160,7 +160,7 @@ def decompose_image(image, palette):
         # Calcul de la couche correspondant à la couleur i
         layer = weights[:, i].reshape(height, width, 1) * palette[i]
         recomposed_image += layer
-        send_intermediate_image(layer, "layers")
+        send_intermediate_image((layer * 255).round(), "layers")
 
-    send_intermediate_image(recomposed_image, "previews")
+    send_intermediate_image((recomposed_image * 255).round(), "previews")
     return recomposed_image
