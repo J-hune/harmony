@@ -14,6 +14,15 @@ class ThreeSceneManager {
         this.pointCloud = null;
         this.overlayMesh = {};
         this.stats = null;
+        this.convexHulls = {};
+
+        document.getElementById("initial-palette").addEventListener("click", () => {
+            this.createConvexHullCircles(this.convexHulls.initial.vertices, this.convexHulls.initial.faces);
+        });
+
+        document.getElementById("simplified-palette").addEventListener("click", () => {
+            this.createConvexHullCircles(this.convexHulls.simplified.vertices, this.convexHulls.simplified.faces);
+        });
     }
 
     /**
@@ -179,9 +188,16 @@ class ThreeSceneManager {
      * Crée les éléments 3D (cercles, contours et arêtes) pour représenter l'enveloppe convexe.
      * @param {Array} vertices - Liste des sommets.
      * @param {Array} faces - Liste des faces (indices des sommets).
+     * @param {string | null} type - Type de l'enveloppe convexe (simplified ou original).
      */
-    createConvexHullCircles(vertices, faces) {
+    createConvexHullCircles(vertices, faces, type = null) {
         if (!vertices || vertices.length === 0) return;
+
+        if (type === "simplified") {
+            this.convexHulls.simplified = {vertices, faces};
+        } else if (type === "initial") {
+            this.convexHulls.initial = {vertices, faces};
+        }
 
         // On supprime les éléments existants
         if (this.overlayMesh.circle) this.scene.remove(this.overlayMesh.circle);

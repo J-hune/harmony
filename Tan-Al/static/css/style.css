@@ -11,6 +11,7 @@
 
 :root {
     --primary-color: #6996E5;
+    --primary-desaturated-color: #9ba9c2;
     --text-color: #eef1fa;
     --light-color: #c7ced9;
 }
@@ -173,16 +174,23 @@ body {
     cursor: pointer;
 }
 
+.previews-container canvas {
+    width: 100%;
+    border-radius: 12px;
+    cursor: pointer;
+}
+
 .palettes-container {
     display: grid;
     grid-template-columns: 1fr 1fr auto;
-    gap: 16px;
+    gap: 14px;
 }
 
 .palettes-container > div {
     display: flex;
     border-radius: 6px;
     overflow: clip;
+    cursor: pointer;
 }
 
 .palettes-container > div div {
@@ -196,14 +204,24 @@ body {
     align-items: center;
     height: 36px;
     width: 36px;
-    background-color: #292c35;
-    border: 2px solid var(--primary-color);
+    border: 2px solid var(--primary-desaturated-color);
     border-radius: 6px;
     cursor: pointer;
+    transition: 0.2s;
 }
 
 .palettes-container #download-palettes svg {
     width: 18px;
+    color: var(--primary-desaturated-color);
+    transition: 0.2s;
+}
+
+.palettes-container #download-palettes:hover {
+    background-color: #292c35;
+    border: 2px solid var(--primary-color);
+}
+
+.palettes-container #download-palettes:hover svg {
     color: var(--primary-color);
 }
 
@@ -223,14 +241,24 @@ body {
     justify-content: center;
     align-items: center;
     height: 100%;
-     background-color: #292c35;
-    border: 2px solid var(--primary-color);
+    border: 2px solid var(--primary-desaturated-color);
     border-radius: 6px;
     cursor: pointer;
+    transition: 0.2s;
 }
 
 .layers-container #download-layers svg {
     width: 40px;
+    color: var(--primary-desaturated-color);
+    transition: 0.2s;
+}
+
+.layers-container #download-layers:hover {
+    background-color: #292c35;
+    border: 2px solid var(--primary-color);
+}
+
+.layers-container #download-layers:hover svg {
     color: var(--primary-color);
 }
 

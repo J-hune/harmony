@@ -154,15 +154,8 @@ def decompose_image(image, palette):
     sum_weights[sum_weights == 0] = 1  # éviter la division par zéro
     weights = (weights.T / sum_weights).T.clip(0, 1)
 
-    # Reconstruction de l'image en sommant les couches pondérées par la palette
+    # Calcul et envoi des couches pondérées
     height, width, _ = image.shape
-    recomposed_image = np.zeros_like(image, dtype=float)
     for i in range(palette.shape[0]):
         # Calcul de la couche correspondant à la couleur i
-        layer = weights[:, i].reshape(height, width, 1) * palette[i]
-        recomposed_image += layer
-
         emit("layer_weights", {"id": i, "width": width, "height": height, "weights": weights[:, i].tolist()})
-
-    send_intermediate_image((recomposed_image * 255).round(), "previews")
-    return recomposed_image
