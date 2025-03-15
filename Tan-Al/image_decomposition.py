@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.sparse import coo_matrix
 from scipy.spatial import ConvexHull, Delaunay
+from flask_socketio import emit
 
 from plot import send_intermediate_image
 
@@ -160,7 +161,8 @@ def decompose_image(image, palette):
         # Calcul de la couche correspondant à la couleur i
         layer = weights[:, i].reshape(height, width, 1) * palette[i]
         recomposed_image += layer
-        send_intermediate_image((layer * 255).round(), "layers")
+
+        emit("layer_weights", {"id": i, "width": width, "height": height, "weights": weights[:, i].tolist()})
 
     send_intermediate_image((recomposed_image * 255).round(), "previews")
     return recomposed_image
