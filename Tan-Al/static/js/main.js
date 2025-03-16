@@ -7,8 +7,8 @@ import {TerminalManager} from './terminal.js';
 
 // Variables globales
 let socket;
-const threeSceneManager = new ThreeSceneManager();
 const paletteManager = new PaletteManager();
+const threeSceneManager = new ThreeSceneManager(paletteManager);
 const layerManager = new LayerManager();
 const terminalManager = new TerminalManager(threeSceneManager);
 
@@ -68,11 +68,13 @@ function initSocket() {
         // data.width, data.height, data.id, data.weights (rgba array)
         const simplifiedPalette = paletteManager.getPalettes()[1];
         layerManager.updateLayer(data, simplifiedPalette);
+        threeSceneManager.addLayerWeights(data.weights, data.id);
 
         // Si on a reçu toutes les couches, on affiche le bouton de téléchargement
         if (data.id === simplifiedPalette.length - 1) {
             document.getElementById('download-layers').classList.remove('hidden');
             layerManager.updateSumLayer(simplifiedPalette);
+            threeSceneManager.updatePointCloud();
         }
     });
 
