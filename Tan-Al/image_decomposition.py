@@ -1,161 +1,358 @@
+import time
 import numpy as np
-from scipy.sparse import coo_matrix
-from scipy.spatial import ConvexHull, Delaunay
+import scipy
 from flask_socketio import emit
+from numpy import median
+from scipy.spatial import ConvexHull, Delaunay
+from scipy import sparse
 
-from plot import send_intermediate_image
-
-
-def convert_rgb_to_rgbxy(image):
+# -------------------------------------------------------------------------
+# 1. Fonction de projection point-triangle
+# -------------------------------------------------------------------------
+def point_triangle_distance(P, triangle):
     """
-    Convertit une image RGB en un tableau de pixels avec coordonnées RGBXY.
-
-    Paramètres :
-        image : tableau NumPy de forme (hauteur, largeur, 3) représentant une image RGB.
-
-    Retourne :
-        Un tableau NumPy de forme (N, 5) où chaque ligne contient (R, G, B, X, Y),
-        avec N = hauteur * largeur.
+    Calcule la distance entre un point P et un triangle (3x3).
+    Retourne un dictionnaire contenant :
+       - 'parameter': les coordonnées barycentriques [u, v, w] (u = 1-v-w)
+       - 'closest': le point du triangle le plus proche de P
+       - 'sqrDistance': la distance au carré
+       - 'distance': la distance euclidienne
     """
-    height, width, _ = image.shape  # Dimensions de l'image
+    # triangle : (V0, V1, V2)
+    V0, V1, V2 = triangle[0], triangle[1], triangle[2]
+    E0 = V1 - V0
+    E1 = V2 - V0
+    D = V0 - P
 
-    # Création des indices X et Y pour chaque pixel
-    y_indices, x_indices = np.meshgrid(np.arange(height), np.arange(width), indexing="ij")
+    a = np.dot(E0, E0)
+    b = np.dot(E0, E1)
+    c = np.dot(E1, E1)
+    d = np.dot(E0, D)
+    e = np.dot(E1, D)
+    det = a * c - b * b
 
-    # Assemblage des canaux de couleur et des coordonnées en un tableau (R, G, B, X, Y)
-    return np.column_stack((image.reshape(-1, 3), x_indices.ravel(), y_indices.ravel()))
+    s = b * e - c * d
+    t = b * d - a * e
+
+    if (s + t) <= det:
+        if s < 0:
+            if t < 0:
+                # Region 4
+                if d < 0:
+                    s = np.clip(-d / a, 0, 1)
+                    t = 0
+                else:
+                    s = 0
+                    t = np.clip(-e / c, 0, 1)
+            else:
+                # Region 3
+                s = 0
+                t = np.clip(-e / c, 0, 1)
+        elif t < 0:
+            # Region 5
+            t = 0
+            s = np.clip(-d / a, 0, 1)
+        else:
+            # Region 0
+            invDet = 1.0 / det
+            s *= invDet
+            t *= invDet
+    else:
+        if s < 0:
+            tmp0 = b + d
+            tmp1 = c + e
+            if tmp1 > tmp0:
+                numer = tmp1 - tmp0
+                denom = a - 2 * b + c
+                s = np.clip(numer / denom, 0, 1)
+                t = 1 - s
+            else:
+                t = np.clip(-e / c, 0, 1)
+                s = 0
+        elif t < 0:
+            tmp0 = b + e
+            tmp1 = a + d
+            if tmp1 > tmp0:
+                numer = tmp1 - tmp0
+                denom = a - 2 * b + c
+                t = np.clip(numer / denom, 0, 1)
+                s = 1 - t
+            else:
+                s = np.clip(-d / a, 0, 1)
+                t = 0
+        else:
+            numer = c + e - b - d
+            denom = a - 2 * b + c
+            s = np.clip(numer / denom, 0, 1)
+            t = 1 - s
+
+    u = 1 - s - t
+    closest = u * V0 + s * V1 + t * V2
+    diff = P - closest
+    sqrDistance = np.dot(diff, diff)
+    distance = np.sqrt(sqrDistance)
+    return {'parameter': [u, s, t], 'closest': closest, 'sqrDistance': sqrDistance, 'distance': distance}
 
 
-def delaunay_barycentrics(vertices, points):
+def extract_rgbxy_weights(palette_rgb, image_orig):
     """
-    Calcule les poids barycentriques dans l'espace défini par 'vertices' pour chaque point de 'points'
-    en utilisant la triangulation de Delaunay.
-    Pour les points extérieurs (simplex == -1), on attribue un poids 1 pour le sommet le plus proche.
-    Retourne une matrice creuse (CSR) de forme (n_points, n_vertices).
+    Extrait les poids de mélange RGBXY à partir d'une image.
+
+    Args:
+        palette_rgb (np.array): Couleurs de la palette (N, 3).
+        image_orig (np.array): Image originale (H, W, 3).
     """
-    tri = Delaunay(vertices)
-    simplex_indices = tri.find_simplex(points, tol=1e-6)
+    n_colors = len(palette_rgb)
+    img = image_orig.copy()
+    height, width = img.shape[:2]
 
-    valid = np.where(simplex_indices != -1)[0]
-    invalid = np.where(simplex_indices == -1)[0]
+    # Création de la grille normalisée (XY)
+    grid_x, grid_y = np.mgrid[0:height, 0:width]
+    norm_grid = np.dstack((grid_x / float(height), grid_y / float(width)))
+    combined_data = np.dstack((img, norm_grid))  # (H, W, 5)
 
-    row_indices_list = []
-    col_indices_list = []
-    vals_list = []
+    t0 = time.time()
+    hull_combined = ConvexHull(combined_data.reshape(-1, 5))
 
-    if valid.size > 0:
-        # Calcul pour les points valides
-        transform_valid = tri.transform[simplex_indices[valid], :points.shape[1]]
-        delta_valid = points[valid] - tri.transform[simplex_indices[valid], points.shape[1]]
-        bary_partial = np.einsum('...jk,...k->...j', transform_valid, delta_valid)
-        bary_valid = np.c_[bary_partial, 1 - bary_partial.sum(axis=1)]
+    # Poids ASAP en RGB via la méthode Tan 2016
+    hull_rgb = img.reshape(-1, 3)[hull_combined.vertices].reshape(-1, 1, 3)
+    asap_weights = compute_asap_weights_tan2016(hull_rgb, palette_rgb)
 
-        # Les indices des sommets du simplex pour chaque point valide
-        simplices_valid = tri.simplices[simplex_indices[valid]]
+    # Poids RGBXY via triangulation Delaunay
+    hull_pts = hull_combined.points[hull_combined.vertices]
+    delaunay_weights = compute_delaunay_barycentric_weights(hull_pts, hull_combined.points, option=3)
+    emit("server_log", {"data": f"Le calcul des poids a pris {time.time() - t0:.2f} secondes"})
 
-        row_indices_valid = np.repeat(valid, simplices_valid.shape[1])
-        col_indices_valid = simplices_valid.ravel()
-        vals_valid = bary_valid.ravel()
+    # Combinaison des poids et reconstruction de l'image
+    mix_weights = delaunay_weights.dot(asap_weights.reshape(-1, n_colors))
+    mix_weights = mix_weights.reshape((height, width, -1)).clip(0, 1)
 
-        row_indices_list.append(row_indices_valid)
-        col_indices_list.append(col_indices_valid)
-        vals_list.append(vals_valid)
+    recon_img = (mix_weights[..., None] * palette_rgb.reshape((1, 1, -1, 3))).sum(axis=2)
+    err = recon_img * 255 - image_orig * 255
+    rmse = np.sqrt(np.square(err.reshape(-1, 3)).sum(axis=-1).mean())
+    emit("server_log", {"data": f"RMSE de reconstruction : {rmse:.2f}"})
 
-    if invalid.size > 0:
-        # Pour chaque point invalide, on choisit le sommet le plus proche
-        for idx in invalid:
-            distances = np.linalg.norm(points[idx] - vertices, axis=1)
-            nearest = np.argmin(distances)
-            row_indices_list.append(np.array([idx]))
-            col_indices_list.append(np.array([nearest]))
-            vals_list.append(np.array([1.0]))
-
-    row_indices = np.concatenate(row_indices_list)
-    col_indices = np.concatenate(col_indices_list)
-    vals = np.concatenate(vals_list)
-
-    return coo_matrix((vals, (row_indices, col_indices)), shape=(len(points), len(vertices))).tocsr()
+    # Envoi des poids par couche via socket
+    for layer in range(mix_weights.shape[-1]):
+        emit("layer_weights", {
+            "id": layer,
+            "width": width,
+            "height": height,
+            "weights": mix_weights[:, :, layer].flatten().tolist()
+        })
 
 
-def star_barycentrics(palette, hull_colors):
+def compute_delaunay_barycentric_weights(hull_points, query_points, option=3):
     """
-    Calcule les poids barycentriques pour les couleurs extraites de l'enveloppe convexe
-    en utilisant une triangulation en étoile basée sur un pivot.
-    Si aucun simplexe ne fournit des poids valides pour un point, on attribue des poids uniformes.
+    Calcule les poids barycentriques via triangulation Delaunay.
+
+    Args:
+        hull_points (np.array): Points de l'enveloppe (M, dim).
+        query_points (np.array): Points à évaluer (N, dim).
+        option (int): Méthode utilisée (seule l'option 3 est supportée ici).
+
+    Returns:
+        scipy.sparse.csr_matrix: Matrice des poids barycentriques.
     """
-    # Choix du pivot : ici, la couleur la plus proche de l'origine (0,0,0)
-    pivot_index = np.argmin(np.linalg.norm(palette, axis=1))
+    tri = Delaunay(hull_points)
+    simplices = tri.find_simplex(query_points, tol=1e-6)
+    X = tri.transform[simplices, :query_points.shape[1]]
+    Y = query_points - tri.transform[simplices, query_points.shape[1]]
+    bary = np.einsum('...jk,...k->...j', X, Y)
+    bary = np.c_[bary, 1 - bary.sum(axis=1)]
 
-    # Calcul de l'enveloppe convexe sur la palette
-    convex_hull = ConvexHull(palette)
-    # Construction des simplexes en étoile (en excluant ceux contenant le pivot)
-    simplices = [[pivot_index] + list(face) for face in convex_hull.simplices if pivot_index not in face]
+    if option == 3:
+        n_query = len(query_points)
+        d = tri.simplices.shape[1]
+        rows = np.repeat(np.arange(n_query).reshape(-1, 1), d, axis=1).ravel()
+        cols = tri.simplices[simplices].ravel()
+        vals = bary.ravel()
+        weights = sparse.coo_matrix((vals, (rows, cols)), shape=(n_query, len(hull_points))).tocsr()
+    else:
+        raise NotImplementedError("Seule l'option 3 est implémentée.")
 
-    # Initialisation des poids à -1
-    bary_coords = -np.ones((hull_colors.shape[0], palette.shape[0]))
-
-    for simplex in simplices:
-        pivot = palette[simplex[0]]
-        A = (palette[simplex[1:]] - pivot).T
-        b = (hull_colors - pivot).T
-        try:
-            bary_partial = np.linalg.solve(A, b).T
-        except np.linalg.LinAlgError:
-            continue  # Passer au simplexe suivant en cas d'erreur
-        bary = np.hstack((1 - bary_partial.sum(axis=1, keepdims=True), bary_partial))
-        valid_mask = (bary >= 0).all(axis=1)
-        # On affecte les poids calculés pour les points valides
-        bary_coords[valid_mask] = 0.0
-        bary_coords[np.ix_(valid_mask, simplex)] = bary[valid_mask]
-
-    # Pour les points n'ayant pas obtenu de solution (négatifs), on attribue des poids uniformes
-    invalid = np.any(bary_coords < 0, axis=1)
-    if np.any(invalid):
-        bary_coords[invalid] = 1.0 / palette.shape[0]
-
-    return bary_coords
+    return weights
 
 
-def decompose_image(image, palette):
+def compute_asap_weights_tan2016(img_labels, tetra_palette):
     """
-    Décompose une image en couches pondérées selon une palette de couleurs.
-    Le procédé consiste à :
-      1. Convertir l'image en un tableau de pixels avec coordonnées RGBXY.
-      2. Calculer l'enveloppe convexe dans cet espace.
-      3. Extraire les couleurs RGB associées aux points de l'enveloppe.
-      4. Calculer les poids barycentriques robustes dans l'espace RGBXY via Delaunay.
-      5. Calculer les poids barycentriques via une triangulation en étoile.
-      6. Combiner ces poids pour reconstituer l'image en couches.
+    Calcule les poids ASAP via triangulation et coordonnées barycentriques (méthode Tan 2016).
+
+    Args:
+        img_labels (np.array): Labels de l'image (peut être (H, W, 3) ou (N, 3)).
+        tetra_palette (np.array): Palette de couleurs (sommets du tétraèdre, (N, 3)).
+
+    Returns:
+        np.array: Poids de mélange sous forme (H, W, N) ou (N, N) selon la forme d'entrée.
     """
-    # Conversion de l'image en tableau de pixels RGBXY
-    rgbxy_pixels = convert_rgb_to_rgbxy(image)
+    # Reordonnancement des sommets par distance à [0,0,0]
+    dist = np.abs(tetra_palette - np.array([[0, 0, 0]])).sum(axis=-1)
+    order = np.argsort(dist)
+    ordered_palette = tetra_palette[order]
 
-    # Calcul de l'enveloppe convexe dans l'espace RGBXY
-    hull = ConvexHull(rgbxy_pixels)
-    hull_indices = hull.vertices
-    hull_points = rgbxy_pixels[hull_indices]
+    # Préparation des labels
+    flat_labels, orig_shape = prepare_labels(img_labels)
 
-    # Récupération des couleurs RGB correspondant aux points de l'enveloppe convexe
-    x_coords = hull_points[:, 3].astype(int)
-    y_coords = hull_points[:, 4].astype(int)
-    hull_colors = image[y_coords, x_coords]
+    # Calcul de l'enveloppe convexe et du Delaunay
+    hull = ConvexHull(ordered_palette)
+    delaunay_test = Delaunay(ordered_palette)
 
-    # Calcul des poids barycentriques dans l'espace RGBXY de manière robuste
-    weights_rgbxy = delaunay_barycentrics(rgbxy_pixels[hull_indices], rgbxy_pixels)
+    # Correction des points hors de l'enveloppe
+    labels_inside = enforce_inside_hull(flat_labels, hull, delaunay_test)
 
-    # Calcul des poids barycentriques pour les couleurs de l'enveloppe convexe par triangulation en étoile
-    weights_palette = star_barycentrics(palette, hull_colors)
+    # Création de la table de correspondance couleur -> indices
+    color_map, uniq_labels = build_color_map(labels_inside)
 
-    # Combinaison des poids pour obtenir, pour chaque pixel, des poids pour chaque couleur de la palette
-    weights = weights_rgbxy.dot(weights_palette)
+    # Attribution des pixels aux faces du tétraèdre et calcul local des poids
+    uniq_weights = assign_face_weights(uniq_labels, ordered_palette, hull, delaunay_test)
 
-    # Normalisation des poids pour chaque pixel (éviter que la somme soit nulle ou déviant de 1)
-    sum_weights = np.array(weights.sum(axis=1)).flatten()
-    sum_weights[sum_weights == 0] = 1  # éviter la division par zéro
-    weights = (weights.T / sum_weights).T.clip(0, 1)
+    # Reconstruction des poids sur l'image entière
+    full_weights = reconstruct_weights(labels_inside, color_map, uniq_weights, ordered_palette.shape[0])
 
-    # Calcul et envoi des couches pondérées
-    height, width, _ = image.shape
-    for i in range(palette.shape[0]):
-        # Calcul de la couche correspondant à la couleur i
-        emit("layer_weights", {"id": i, "width": width, "height": height, "weights": weights[:, i].tolist()})
+    # Remise à l'ordre initial de la palette
+    reordered_weights = np.ones_like(full_weights)
+    reordered_weights[:, order] = full_weights
+    reordered_weights = reordered_weights.reshape((orig_shape[0], orig_shape[1], -1))
+
+    # Calcul d'erreur (affichage)
+    recon = (reordered_weights[..., None] * tetra_palette.reshape((1, 1, -1, 3))).sum(axis=2)
+    diff = recon.reshape(orig_shape) * 255 - img_labels.reshape(orig_shape) * 255
+    diff_val = np.sqrt(np.square(diff.reshape(-1, 3)).sum(axis=-1))
+    rmse = np.sqrt(np.square(diff.reshape(-1, 3)).sum() / diff.reshape(-1, 3).shape[0])
+
+    emit('server_log', {'data': f"Erreur maximale : {diff_val.max():.2f} (distance euclidienne)"})
+    emit('server_log', {'data': f"Erreur médiane : {median(diff_val):.2f} (distance euclidienne)"})
+    emit('server_log', {'data': f"RMSE : {rmse:.2f}"})
+
+    return reordered_weights
+
+
+def prepare_labels(image_array):
+    """
+    Aplati les labels d'une image et retourne leur forme originale.
+
+    Args:
+        image_array (np.array): Image (H, W, 3) ou autre.
+
+    Returns:
+        tuple: (labels aplatis (N, 3), forme originale)
+    """
+    return image_array.reshape(-1, 3), image_array.shape
+
+
+def enforce_inside_hull(labels, hull_obj, delaunay_obj):
+    """
+    Force les points à être à l'intérieur de l'enveloppe convexe.
+
+    Args:
+        labels (np.array): Points (N, 3).
+        hull_obj (ConvexHull): Enveloppe convexe.
+        delaunay_obj (Delaunay): Triangulation associée.
+
+    Returns:
+        np.array: Points ajustés.
+    """
+    inside = delaunay_obj.find_simplex(labels, tol=1e-8)
+    corrected = labels.copy()
+    for idx in range(labels.shape[0]):
+        if inside[idx] < 0:
+            dists = []
+            close_pts = []
+            for simplex in hull_obj.simplices:
+                res = point_triangle_distance(labels[idx], hull_obj.points[simplex])
+                dists.append(res['distance'])
+                close_pts.append(res['closest'])
+            corrected[idx] = close_pts[np.argmin(np.asarray(dists))]
+    new_inside = delaunay_obj.find_simplex(corrected, tol=1e-8)
+    assert np.all(new_inside >= 0), "Certains points sont toujours hors de l'enveloppe"
+    return corrected
+
+
+def build_color_map(labels):
+    """
+    Construit un dictionnaire associant chaque couleur unique aux indices de pixels correspondants.
+
+    Args:
+        labels (np.array): Points (N, 3).
+
+    Returns:
+        tuple: (dictionnaire couleur->indices, np.array des couleurs uniques)
+    """
+    col_map = {}
+    label_tuples = [tuple(row) for row in labels]
+    uniq = np.array(list(set(label_tuples)))
+    for col in uniq:
+        col_map.setdefault(tuple(col), [])
+    for i, col in enumerate(label_tuples):
+        col_map[tuple(col)].append(i)
+    return col_map, uniq
+
+
+def assign_face_weights(uniq_labels, palette, hull_obj, delaunay_obj):
+    """
+    Associe les pixels uniques aux faces du tétraèdre et calcule leurs poids barycentriques.
+
+    Args:
+        uniq_labels (np.array): Couleurs uniques (K, 3).
+        palette (np.array): Palette (N, 3).
+        hull_obj (ConvexHull): Enveloppe convexe de la palette.
+        delaunay_obj (Delaunay): Triangulation de la palette.
+
+    Returns:
+        np.array: Poids locaux (K, N).
+    """
+    face_pixel_map = {}
+    n_vertices = palette.shape[0]
+    for simplex in hull_obj.simplices:
+        if np.all(simplex != 0):
+            face_pixel_map.setdefault(tuple(simplex), [])
+
+    remaining = set(range(len(uniq_labels)))
+    for simplex in hull_obj.simplices:
+        if np.all(simplex != 0):
+            i, j, k = simplex
+            tetra_face = np.array([palette[0], palette[i], palette[j], palette[k]])
+            try:
+                local_delaunay = Delaunay(tetra_face)
+                if remaining:
+                    indices = np.array(list(remaining))
+                    test_labels = uniq_labels[indices]
+                    inside = local_delaunay.find_simplex(test_labels, tol=1e-8)
+                    valid = indices[inside >= 0]
+                    face_pixel_map[tuple((i, j, k))] += valid.tolist()
+                    remaining.difference_update(valid.tolist())
+            except Exception:
+                continue
+    assert len(remaining) == 0, "Tous les pixels uniques n'ont pas été assignés à une face."
+
+    uniq_weights = np.zeros((len(uniq_labels), n_vertices))
+    for face, indices in face_pixel_map.items():
+        face_sorted = sorted(face)
+        cols = [0] + face_sorted
+        face_pts = np.array([palette[idx] for idx in cols])
+        if indices:
+            bary = compute_delaunay_barycentric_weights(face_pts, uniq_labels[list(indices)], option=3)
+            uniq_weights[np.array(indices)[:, None], cols] = bary.toarray().reshape(-1, len(cols))
+    return uniq_weights
+
+
+def reconstruct_weights(adj_labels, col_map, uniq_weights, n_vertices):
+    """
+    Reconstruit la matrice complète de poids à partir des poids uniques.
+
+    Args:
+        adj_labels (np.array): Points ajustés (N, 3).
+        col_map (dict): Dictionnaire couleur -> indices.
+        uniq_weights (np.array): Poids uniques (K, n_vertices).
+        n_vertices (int): Nombre de sommets.
+
+    Returns:
+        np.array: Poids de mélange (N, n_vertices).
+    """
+    num_pixels = adj_labels.shape[0]
+    full_w = np.zeros((num_pixels, n_vertices))
+    # Itération sur les couleurs uniques
+    for idx, unique_col in enumerate(np.array(list(col_map.keys()))):
+        indices = col_map[tuple(unique_col)]
+        full_w[indices, :] = uniq_weights[idx, :]
+    return full_w
