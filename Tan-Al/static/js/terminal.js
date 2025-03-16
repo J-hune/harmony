@@ -56,6 +56,11 @@ class TerminalManager {
         const p = document.createElement('p');
         p.textContent = message;
         if (type === 'error') p.style.color = 'red';
+        if (type === 'important') {
+            let style = window.getComputedStyle(document.body)
+            p.style.fontWeight = 'bold';
+            p.style.color = style.getPropertyValue('--primary-color');
+        }
 
         // On cherche si un thinking-indicator est présent pour placer le message avant
         const thinkingIndicator = document.getElementById('thinking-indicator');

@@ -75,6 +75,9 @@ function initSocket() {
             document.getElementById('download-layers').classList.remove('hidden');
             layerManager.updateSumLayer(simplifiedPalette);
             threeSceneManager.updatePointCloud();
+
+            // On avertit l'utilisateur qu'il peut modifier les couleurs de la palette
+            terminalManager.logMessage("💡 Information, vous pouvez modifier les couleurs de la palette en déplaçant les points de l'enveloppe convexe.", 'important');
         }
     });
 
@@ -152,7 +155,7 @@ function onImageUpload(file) {
             originalImage.src = event.target.result;
 
             // On envoie l'image encodée en base64 au serveur via Socket.IO
-            socket.emit('upload_image', { image_data: event.target.result });
+            socket.emit('upload_image', {image_data: event.target.result});
             console.log("Envoi de l'image au serveur, en attente de l'enveloppe convexe...");
             terminalManager.logMessage("Envoi de l'image au serveur, en attente de l'enveloppe convexe...");
 
@@ -167,6 +170,8 @@ function onImageUpload(file) {
  * Initialise les fonctionnalités web (drag & drop, input file).
  */
 function initWebFeatures() {
+    terminalManager.logMessage("👋 Bienvenue sur IlFautQueJeTrouveUnNom !", 'important');
+
     const input = document.getElementById('upload');
     const area = document.getElementById('drag-area');
 
