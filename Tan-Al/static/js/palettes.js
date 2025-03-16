@@ -20,6 +20,14 @@ class PaletteManager {
         return [this.initial, this.simplified];
     }
 
+    updateColorAt(index, color) {
+        this.simplified[index] = color;
+
+        // On met à jour la couleur dans le DOM
+        const simplifiedPalette = document.getElementById('simplified-palette');
+        simplifiedPalette.children[index].style.backgroundColor = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+    }
+
     /**
      * Crée une palette et met à jour le DOM pour l'afficher.
      *

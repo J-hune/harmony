@@ -8,8 +8,8 @@ import {TerminalManager} from './terminal.js';
 // Variables globales
 let socket;
 const paletteManager = new PaletteManager();
-const threeSceneManager = new ThreeSceneManager(paletteManager);
 const layerManager = new LayerManager();
+const threeSceneManager = new ThreeSceneManager(paletteManager, layerManager);
 const terminalManager = new TerminalManager(threeSceneManager);
 
 // Initialisation des managers et de la connexion Socket.IO

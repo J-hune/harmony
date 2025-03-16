@@ -90,13 +90,15 @@ class LayerManager {
 
         // On transforme les poids en pixels RGBA
         // ici on multiplie par la couleur de la palette mais c'est purement esthétique
-        const imageData = this.generateRGBAImageData(data.weights, data.width, data.height, simplifiedPalette[data.id]);
+        const width = data.width || this.width;
+        const height = data.height || this.height;
+        const imageData = this.generateRGBAImageData(data.weights, width, height, simplifiedPalette[data.id]);
 
         // On met à jour le canvas
         ctx.putImageData(imageData, 0, 0);
-        this.width = data.width;
-        this.height = data.height;
-        this.layers.push(data.weights);
+        this.width = width;
+        this.height = height;
+        this.layers[data.id] = data.weights;
     }
 
     /**
