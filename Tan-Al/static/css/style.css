@@ -12,8 +12,11 @@
 :root {
     --primary-color: #6996E5;
     --primary-desaturated-color: #9ba9c2;
+    --secondary-color: #DBD56E;
+    --secondary-dark-color: #b3ae59;
     --text-color: #eef1fa;
     --light-color: #c7ced9;
+    --three-background-color: #171a21;
 }
 
 /* width */
@@ -194,7 +197,7 @@ body {
 
 .palettes-container {
     display: grid;
-    grid-template-columns: 1fr 1fr auto;
+    grid-template-columns: 1fr 1fr auto auto;
     gap: 14px;
 }
 
@@ -208,6 +211,11 @@ body {
 .palettes-container > div div {
     height: 40px;
     width: 100%;
+}
+
+.palettes-container .palettes-actions {
+    display: flex;
+    gap: 10px;
 }
 
 .palettes-container #download-palettes {
@@ -235,6 +243,30 @@ body {
 
 .palettes-container #download-palettes:hover svg {
     color: var(--primary-color);
+}
+
+.palettes-container #rollback-palette {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 36px;
+    width: 36px;
+    background-color: var(--secondary-color);
+    border: 2px solid var(--secondary-color);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.palettes-container #rollback-palette svg {
+    width: 20px;
+    color: var(--three-background-color);
+    transition: 0.2s;
+}
+
+.palettes-container #rollback-palette:hover {
+    background-color: var(--secondary-dark-color);
+    border: 2px solid var(--secondary-dark-color);
 }
 
 .layers-container {

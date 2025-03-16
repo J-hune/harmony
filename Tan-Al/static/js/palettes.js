@@ -4,6 +4,7 @@ class PaletteManager {
     constructor() {
         this.initial = [];
         this.simplified = [];
+        this.originalSimplified = [];
 
         this.downloadButton = document.getElementById('download-palettes');
         this.downloadButton.addEventListener('click', () => {
@@ -20,12 +21,28 @@ class PaletteManager {
         return [this.initial, this.simplified];
     }
 
+    /**
+     * Modifie une couleur de la palette simplifiée.
+     * @param {number} index - L'index de la couleur à modifier.
+     * @param {Array<number>} color - La nouvelle couleur RGB.
+     */
     updateColorAt(index, color) {
         this.simplified[index] = color;
 
         // On met à jour la couleur dans le DOM
         const simplifiedPalette = document.getElementById('simplified-palette');
         simplifiedPalette.children[index].style.backgroundColor = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+    }
+
+    /**
+     * Réinitialise la palette simplifiée avec les valeurs originales.
+     */
+    rollback() {
+        this.simplified = JSON.parse(JSON.stringify(this.originalSimplified));
+        const simplifiedPalette = document.getElementById('simplified-palette');
+        for (let i = 0; i < simplifiedPalette.children.length; i++) {
+            simplifiedPalette.children[i].style.backgroundColor = `rgb(${this.simplified[i][0]}, ${this.simplified[i][1]}, ${this.simplified[i][2]})`;
+        }
     }
 
     /**
@@ -51,7 +68,10 @@ class PaletteManager {
         });
 
         if (type === 'initial') this.initial = palette;
-        else this.simplified = palette;
+        else {
+            this.simplified = palette;
+            this.originalSimplified = JSON.parse(JSON.stringify(palette));
+        }
     }
 
     /**
