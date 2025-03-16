@@ -6,7 +6,9 @@ import {Line2} from "three/examples/jsm/lines/Line2";
 import Stats from "stats";
 
 class ThreeSceneManager {
-    constructor(paletteManager) {
+    constructor(paletteManager, layerManager) {
+        this.paletteManager = paletteManager;
+        this.layerManager = layerManager;
         this.scene = null;
         this.camera = null;
         this.renderer = null;
@@ -15,8 +17,10 @@ class ThreeSceneManager {
         this.overlayMesh = {};
         this.stats = null;
         this.convexHulls = {};
-        this.weights = []
-        this.paletteManager = paletteManager;
+        this.weights = [];
+        this.raycaster = new THREE.Raycaster();
+        this.mouse = new THREE.Vector2();
+        this.selectedPoint = null;
 
         document.getElementById("initial-palette").addEventListener("click", () => {
             this.createConvexHullCircles(this.convexHulls.initial.vertices, this.convexHulls.initial.faces);
@@ -66,6 +70,10 @@ class ThreeSceneManager {
         // Gestion de l'événement de redimensionnement
         window.addEventListener("resize", this.onWindowResize.bind(this), false);
 
+        // Ajout des listener pour le déplacement des points
+        this.renderer.domElement.addEventListener("mousedown", this.onMouseDown.bind(this), false);
+        this.renderer.domElement.addEventListener("mousemove", this.onMouseMove.bind(this), false);
+        this.renderer.domElement.addEventListener("mouseup", this.onMouseUp.bind(this), false);
 
         this.buildRgbCube(); // On ajoute le cube représentant l'espace RGB
         this.animate(); // On lance la boucle d'animation
@@ -262,12 +270,13 @@ class ThreeSceneManager {
         const circleRimGeometry = new THREE.CircleGeometry(radiusRim, segments);
         const circleRimMaterial = new THREE.MeshBasicMaterial({color: 0xFFFFFF});
 
-        vertices.forEach(vertex => {
+        vertices.forEach((vertex, index) => {
             // On crée le cercle pour chaque sommet
             const color = new THREE.Color(vertex[0], vertex[1], vertex[2]).convertSRGBToLinear();
             const circleMaterial = new THREE.MeshBasicMaterial({color});
             const circle = new THREE.Mesh(circleGeometry, circleMaterial);
             circle.position.set(vertex[0] - 0.5, vertex[1] - 0.5, vertex[2] - 0.5);
+            circle.userData.index = index;
             this.overlayMesh.circle.add(circle);
 
             // On crée le contour du cercle
@@ -341,6 +350,90 @@ class ThreeSceneManager {
         this.controls.update();
         this.renderer.render(this.scene, this.camera);
         this.stats.update();
+    }
+
+
+    onMouseDown(event) {
+        if (this.weights.length !== this.convexHulls.simplified.vertices.length) return;
+
+        // On stocke le container pour les coordonnées (peu probable que la taille change alors que la souris est enfoncée)
+        const container = document.getElementById("webgl-output");
+        this.container = container;
+        event.preventDefault();
+
+        // On calcule la position de la souris dans l'espace 3D
+        this.mouse.x = ( event.offsetX / container.offsetWidth ) * 2 - 1;
+        this.mouse.y = - ( event.offsetY / container.offsetHeight ) * 2 + 1;
+
+        // On lance un rayon pour détecter les intersections avec les cercles
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+        const intersects = this.raycaster.intersectObjects(this.overlayMesh.circle.children);
+
+        // On ne retient que le premier point intersect
+        if (intersects.length > 0) {
+            this.controls.enabled = false;
+            this.selectedPoint = intersects[0].object;
+        }
+    }
+
+    onMouseMove(event) {
+        if (!this.selectedPoint) return;
+        event.preventDefault();
+
+        this.mouse.x = ( event.offsetX / this.container.offsetWidth ) * 2 - 1;
+        this.mouse.y = - ( event.offsetY / this.container.offsetHeight ) * 2 + 1;
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+
+        // On crée un plan passant par la position du point et orienté selon la direction de la caméra
+        const planeNormal = new THREE.Vector3();
+        this.camera.getWorldDirection(planeNormal);
+        const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(planeNormal, this.selectedPoint.position);
+        const intersectPoint = new THREE.Vector3();
+        this.raycaster.ray.intersectPlane(plane, intersectPoint);
+
+        if (intersectPoint) {
+            const index = this.selectedPoint.userData.index;
+
+            // Mise à jour de la position du point
+            this.selectedPoint.position.copy(intersectPoint);
+
+            // Mise à jour du tableau des vertices de l'enveloppe
+            this.convexHulls.simplified.vertices[index] = [intersectPoint.x + 0.5, intersectPoint.y + 0.5, intersectPoint.z + 0.5];
+
+            // Mise à jour du cercle
+            this.overlayMesh.rims.children[index].position.copy(intersectPoint);
+
+            // Mise à jour des arêtes
+            this.overlayMesh.edges.children.forEach((line, i) => {
+                const faceIndex = Math.floor(i / 3);
+                const vertexIndex = i % 3;
+                const vertex = this.convexHulls.simplified.vertices[this.convexHulls.simplified.faces[faceIndex][vertexIndex]];
+                const nextVertex = this.convexHulls.simplified.vertices[this.convexHulls.simplified.faces[faceIndex][(vertexIndex + 1) % 3]];
+                line.geometry.setPositions([vertex[0] - 0.5, vertex[1] - 0.5, vertex[2] - 0.5, nextVertex[0] - 0.5, nextVertex[1] - 0.5, nextVertex[2] - 0.5]);
+            });
+
+            // Mise à jour de la palette via paletteManager (il faut définir une méthode updateColorAt dans paletteManager)
+            const newColor = [
+                Math.round((intersectPoint.x + 0.5) * 255),
+                Math.round((intersectPoint.y + 0.5) * 255),
+                Math.round((intersectPoint.z + 0.5) * 255)
+            ];
+
+            this.paletteManager.updateColorAt(index, newColor);
+            this.layerManager.updateLayer({
+                "id": index,
+                "weights": this.weights[index],
+            }, this.paletteManager.getPalettes()[1]);
+            this.layerManager.updateSumLayer(this.paletteManager.getPalettes()[1]);
+            this.updatePointCloud();
+        }
+
+    }
+
+    onMouseUp(event) {
+        event.preventDefault();
+        this.selectedPoint = null;
+        this.controls.enabled = true;
     }
 }
 
