@@ -132,7 +132,7 @@ class ThreeSceneManager {
         this.stats.dom.style.top = "0";
         this.stats.dom.style.right = "0";
         this.stats.dom.style.left = "auto";
-        document.body.appendChild(this.stats.dom);
+        container.parentElement.appendChild(this.stats.dom);
 
         // Gestion de l'événement de redimensionnement
         window.addEventListener("resize", this.onWindowResize.bind(this), false);
