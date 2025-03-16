@@ -1,12 +1,12 @@
 @font-face {
-  font-family: Poppins;
-  src: url(../fonts/Poppins-Regular.ttf);
+    font-family: Poppins;
+    src: url(../fonts/Poppins-Regular.ttf);
 }
 
 @font-face {
-  font-family: Poppins;
-  src: url(../fonts/Poppins-Medium.ttf);
-  font-weight: 500;
+    font-family: Poppins;
+    src: url(../fonts/Poppins-Medium.ttf);
+    font-weight: 500;
 }
 
 :root {
@@ -64,7 +64,7 @@ body {
 
 .container {
     display: grid;
-    grid-template-columns: 600px auto;
+    grid-template-columns: 600px auto 90px;
     height: 100vh;
     width: 100vw;
     background-color: #191a1e;
@@ -197,7 +197,7 @@ body {
 
 .palettes-container {
     display: grid;
-    grid-template-columns: 1fr 1fr auto auto;
+    grid-template-columns: 1fr 1fr auto;
     gap: 14px;
 }
 
@@ -215,7 +215,7 @@ body {
 
 .palettes-container .palettes-actions {
     display: flex;
-    gap: 10px;
+    gap: 8px;
 }
 
 .palettes-container #download-palettes {
@@ -310,3 +310,39 @@ body {
     width: 100%;
 }
 
+.harmonize {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 100px 16px;
+    background-color: #212429;
+    box-sizing: border-box;
+    overflow-y: scroll;
+}
+
+.harmonize #harmonize {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-image: radial-gradient(66.11% 66.11% at 50% 33.89%, hsla(0, 0%, 100%, .4) 0, hsla(0, 0%, 100%, 0) 100%),
+    linear-gradient(278.88deg, #fff, #66e3ff 28.83%, #a787ff 56.31%, #ffc875 86.49%);
+    padding: 10px;
+    font-size: 16px;
+    font-weight: 500;
+    color: #000;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition-duration: .2s;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.harmonize #harmonize:hover {
+    transform: translateY(-2px);
+    background-image: radial-gradient(66.11% 66.11% at 50% 33.89%, hsla(0, 0%, 100%, .6) 0, hsla(0, 0%, 100%, 0) 100%),
+    linear-gradient(278.88deg, #fff, #66e3ff 28.83%, #a787ff 56.31%, #ffc875 86.49%);
+}
+
+.harmonize #harmonize svg {
+    width: 30px;
+}
