@@ -4,7 +4,7 @@ import numpy as np
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 
-from image_decomposition import decompose_image
+from image_decomposition import extract_rgbxy_weights
 from palette_simplification import simplify_convex_palette
 
 app = Flask(__name__)
@@ -71,7 +71,7 @@ def handle_upload_image(data):
         return
 
     # On décompose l'image en couches pondérées selon la palette de couleurs
-    decompose_image(pixels, vertices)
+    extract_rgbxy_weights(vertices, pixels)
     emit('thinking', {'thinking': False})
 
 

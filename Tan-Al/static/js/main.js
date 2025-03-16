@@ -44,7 +44,11 @@ function initSocket() {
     });
 
     socket.on('server_log', (msg) => {
-        terminalManager.logMessage('Log du serveur : ' + msg.data);
+        if (msg.error) {
+            terminalManager.logMessage('Erreur reçue du serveur : ' + msg.error, 'error');
+        } else {
+            terminalManager.logMessage('Log du serveur : ' + msg.data);
+        }
     });
 
     socket.on('convex_hull', (data) => {
