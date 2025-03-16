@@ -1,8 +1,8 @@
 import * as THREE from "three";
-import {OrbitControls} from "three/examples/jsm/controls/OrbitControls";
-import {LineGeometry} from "three/examples/jsm/lines/LineGeometry";
-import {LineMaterial} from "three/examples/jsm/lines/LineMaterial";
-import {Line2} from "three/examples/jsm/lines/Line2";
+import {OrbitControls} from "three/examples/jsm/controls/OrbitControls.js";
+import {LineGeometry} from "three/examples/jsm/lines/LineGeometry.js";
+import {LineMaterial} from "three/examples/jsm/lines/LineMaterial.js";
+import {Line2} from "three/examples/jsm/lines/Line2.js";
 import Stats from "stats";
 
 // Définition d'une constante pour le décalage pour centrer les coordonnées RGB
@@ -238,7 +238,7 @@ class ThreeSceneManager {
         geometry.setPositions(positions);
 
         const material = new LineMaterial({
-            linewidth: 0.004,
+            linewidth: 4,
             color: 0xffffff,
             vertexColors: true,
         });
@@ -383,7 +383,7 @@ class ThreeSceneManager {
         });
 
         const edgeMaterial = new LineMaterial({
-            linewidth: 0.003,
+            linewidth: 3,
             color: 0xffffff,
             vertexColors: true,
         });
