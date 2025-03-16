@@ -335,14 +335,33 @@ body {
     cursor: pointer;
     transition-duration: .2s;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: rgba(23, 26, 33, 0.7) 0 1px 4px;
 }
 
 .harmonize #harmonize:hover {
-    transform: translateY(-2px);
+    transform: translateY(-1px);
     background-image: radial-gradient(66.11% 66.11% at 50% 33.89%, hsla(0, 0%, 100%, .6) 0, hsla(0, 0%, 100%, 0) 100%),
     linear-gradient(278.88deg, #fff, #66e3ff 28.83%, #a787ff 56.31%, #ffc875 86.49%);
 }
 
 .harmonize #harmonize svg {
     width: 30px;
+}
+
+.tooltip {
+    background: var(--text-color);
+    color: #000;
+    font-weight: 500;
+    padding: 4px 8px;
+    box-shadow: rgba(23, 26, 33, 0.7) 0 1px 4px;
+    font-size: 13px;
+    border-radius: 4px;
+    opacity: 0;
+    transition: cubic-bezier(0.4, 0, 0.2, 1) 0.2s;
+    visibility: hidden; /* Assure que l'élément est complètement caché */
+}
+
+.tooltip[data-show] {
+    opacity: 1;
+    visibility: visible; /* Assure que l'élément est visible */
 }

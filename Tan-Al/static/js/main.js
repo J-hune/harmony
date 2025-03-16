@@ -4,9 +4,11 @@ import {LayerManager} from './layers.js';
 import {PaletteManager} from './palettes.js';
 import {ThreeSceneManager} from './three.js';
 import {TerminalManager} from './terminal.js';
+import {TooltipsManager} from './tooltips.js';
 
 // Variables globales
 let socket;
+const tooltipsManager = new TooltipsManager();
 const paletteManager = new PaletteManager();
 const layerManager = new LayerManager();
 const threeSceneManager = new ThreeSceneManager(paletteManager, layerManager);
@@ -16,6 +18,7 @@ const terminalManager = new TerminalManager(threeSceneManager);
 threeSceneManager.init();
 initWebFeatures();
 initSocket();
+tooltipsManager.init();
 
 /**
  * Initialise la connexion Socket.IO et définit les gestionnaires d'événements.
@@ -159,7 +162,9 @@ function onImageUpload(file) {
             console.log("Envoi de l'image au serveur, en attente de l'enveloppe convexe...");
             terminalManager.logMessage("Envoi de l'image au serveur, en attente de l'enveloppe convexe...");
 
-            threeSceneManager.recreateFromOriginal();
+            originalImage.onload = () => {
+                threeSceneManager.recreateFromOriginal();
+            }
         };
         img.src = event.target.result;
     };
