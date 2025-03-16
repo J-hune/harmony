@@ -354,7 +354,7 @@ class ThreeSceneManager {
 
 
     onMouseDown(event) {
-        if (this.weights.length !== this.convexHulls.simplified.vertices.length) return;
+        if (this.weights.length !== this.convexHulls.simplified?.vertices.length) return;
 
         // On stocke le container pour les coordonnées (peu probable que la taille change alors que la souris est enfoncée)
         const container = document.getElementById("webgl-output");
