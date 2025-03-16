@@ -6,7 +6,7 @@ import {Line2} from "three/examples/jsm/lines/Line2";
 import Stats from "stats";
 
 class ThreeSceneManager {
-    constructor() {
+    constructor(paletteManager) {
         this.scene = null;
         this.camera = null;
         this.renderer = null;
@@ -15,6 +15,8 @@ class ThreeSceneManager {
         this.overlayMesh = {};
         this.stats = null;
         this.convexHulls = {};
+        this.weights = []
+        this.paletteManager = paletteManager;
 
         document.getElementById("initial-palette").addEventListener("click", () => {
             this.createConvexHullCircles(this.convexHulls.initial.vertices, this.convexHulls.initial.faces);
@@ -73,6 +75,7 @@ class ThreeSceneManager {
      * Réinitialise la scène en supprimant le nuage de points et les éléments de superposition.
      */
     reset() {
+        this.weights = [];
         if (this.pointCloud) {
             this.scene.remove(this.pointCloud);
             if (this.overlayMesh.rims) this.scene.remove(this.overlayMesh.rims);
@@ -80,6 +83,48 @@ class ThreeSceneManager {
             if (this.overlayMesh.edges) this.scene.remove(this.overlayMesh.edges);
             this.overlayMesh = {};
         }
+    }
+
+    addLayerWeights(weights, id) {
+        this.weights[id] = weights;
+    }
+
+    /**
+     * Met à jour le nuage de points 3D avec les poids
+     */
+    updatePointCloud() {
+        const palette = this.paletteManager.getPalettes()[1];
+        if (palette.length !== this.weights.length) {
+            console.error("Le nombre de couches ne correspond pas au nombre de palettes: ", this.weights.length, palette.length);
+            return;
+        }
+
+        // On met à jour la position des points
+        const positions = new Float32Array(this.weights[0].length * 3);
+        const colors = new Float32Array(this.weights[0].length * 3);
+
+        for (let i = 0; i < this.weights[0].length; i++) {
+            // On additionne la multiplication des poids par les couleurs de chaque couche
+            let r = 0, g = 0, b = 0;
+            for (let j = 0; j < this.weights.length; j++) {
+                r += this.weights[j][i] * palette[j][0];
+                g += this.weights[j][i] * palette[j][1];
+                b += this.weights[j][i] * palette[j][2];
+            }
+
+            positions[3 * i] = r / 255 - 0.5;
+            positions[3 * i + 1] = g / 255 - 0.5;
+            positions[3 * i + 2] = b / 255 - 0.5;
+
+            const color = new THREE.Color(r / 255, g / 255, b / 255);
+            color.convertSRGBToLinear();
+            colors[3 * i] = color.r;
+            colors[3 * i + 1] = color.g;
+            colors[3 * i + 2] = color.b;
+        }
+
+        this.pointCloud.geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+        this.pointCloud.geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     }
 
     /**
