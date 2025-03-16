@@ -107,7 +107,7 @@ function reset() {
     const idsToHide = [
         "previews-title", "previews-container", "original-image", "harmonized-image",
         "palettes-title", "initial-palette", "simplified-palette", "download-palettes",
-        "layers-title", "layers-container", "download-layers"
+        "layers-title", "layers-container", "download-layers", "rollback-palette"
     ];
     idsToHide.forEach(id => {
         const element = document.getElementById(id);
@@ -159,7 +159,7 @@ function onImageUpload(file) {
             console.log("Envoi de l'image au serveur, en attente de l'enveloppe convexe...");
             terminalManager.logMessage("Envoi de l'image au serveur, en attente de l'enveloppe convexe...");
 
-            threeSceneManager.createPointCloud(img);
+            threeSceneManager.recreateFromOriginal();
         };
         img.src = event.target.result;
     };
