@@ -5,6 +5,9 @@ import {LineMaterial} from "three/examples/jsm/lines/LineMaterial";
 import {Line2} from "three/examples/jsm/lines/Line2";
 import Stats from "stats";
 
+// Définition d'une constante pour le décalage pour centrer les coordonnées RGB
+const CENTER_OFFSET = 0.5;
+
 class ThreeSceneManager {
     constructor(paletteManager, layerManager) {
         this.paletteManager = paletteManager;
@@ -18,16 +21,31 @@ class ThreeSceneManager {
         this.stats = null;
         this.convexHulls = {};
         this.weights = [];
+        this.paletteChanged = false;
+        this.displayedPalette = "initial";
         this.raycaster = new THREE.Raycaster();
         this.mouse = new THREE.Vector2();
         this.selectedPoint = null;
 
+        // Gestion des boutons pour le changement de palette
         document.getElementById("initial-palette").addEventListener("click", () => {
-            this.createConvexHullCircles(this.convexHulls.initial.vertices, this.convexHulls.initial.faces);
+            if (this.paletteChanged) return;
+            this.displayedPalette = "initial";
+            this.createConvexHullCircles(
+                this.convexHulls.initial.vertices,
+                this.convexHulls.initial.faces,
+                "initial"
+            );
         });
 
         document.getElementById("simplified-palette").addEventListener("click", () => {
-            this.createConvexHullCircles(this.convexHulls.simplified.vertices, this.convexHulls.simplified.faces);
+            if (this.paletteChanged || !this.convexHulls.simplified) return;
+            this.displayedPalette = "simplified";
+            this.createConvexHullCircles(
+                this.convexHulls.simplified.vertices,
+                this.convexHulls.simplified.faces,
+                "simplified"
+            );
         });
     }
 
@@ -59,7 +77,7 @@ class ThreeSceneManager {
         // Contrôles orbitaux
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
 
-        // On initialise stats.js (pour les fps)
+        // Initialisation de stats.js (fps)
         this.stats = new Stats();
         this.stats.dom.style.position = "absolute";
         this.stats.dom.style.top = "0";
@@ -70,7 +88,7 @@ class ThreeSceneManager {
         // Gestion de l'événement de redimensionnement
         window.addEventListener("resize", this.onWindowResize.bind(this), false);
 
-        // Ajout des listener pour le déplacement des points
+        // Ajout des listeners pour le déplacement des points
         this.renderer.domElement.addEventListener("mousedown", this.onMouseDown.bind(this), false);
         this.renderer.domElement.addEventListener("mousemove", this.onMouseMove.bind(this), false);
         this.renderer.domElement.addEventListener("mouseup", this.onMouseUp.bind(this), false);
@@ -83,36 +101,55 @@ class ThreeSceneManager {
      * Réinitialise la scène en supprimant le nuage de points et les éléments de superposition.
      */
     reset() {
+        // Réinitialisation du curseur des palettes
+        document.getElementById("initial-palette").style.cursor = "pointer";
+        document.getElementById("simplified-palette").style.cursor = "pointer";
+        this.paletteChanged = false;
+        this.displayedPalette = "initial";
+        this.convexHulls = {};
         this.weights = [];
+
+        // Suppression du nuage de points de la scène
         if (this.pointCloud) {
             this.scene.remove(this.pointCloud);
-            if (this.overlayMesh.rims) this.scene.remove(this.overlayMesh.rims);
-            if (this.overlayMesh.circle) this.scene.remove(this.overlayMesh.circle);
-            if (this.overlayMesh.edges) this.scene.remove(this.overlayMesh.edges);
-            this.overlayMesh = {};
+            this.pointCloud.geometry.dispose();
+            this.pointCloud.material.dispose();
+            this.pointCloud = null;
         }
+
+        // Suppression de tous les groupes d'overlay (cercles, contours, arêtes)
+        Object.values(this.overlayMesh).forEach((group) => {
+            if (group) this.scene.remove(group);
+        });
+        this.overlayMesh = {};
     }
 
+    /**
+     * Ajoute les poids d'une couche.
+     */
     addLayerWeights(weights, id) {
         this.weights[id] = weights;
     }
 
     /**
-     * Met à jour le nuage de points 3D avec les poids
+     * Met à jour le nuage de points 3D avec les poids.
      */
     updatePointCloud() {
         const palette = this.paletteManager.getPalettes()[1];
         if (palette.length !== this.weights.length) {
-            console.error("Le nombre de couches ne correspond pas au nombre de palettes: ", this.weights.length, palette.length);
+            console.error(
+                "Le nombre de couches ne correspond pas au nombre de palettes: ",
+                this.weights.length,
+                palette.length
+            );
             return;
         }
 
-        // On met à jour la position des points
-        const positions = new Float32Array(this.weights[0].length * 3);
-        const colors = new Float32Array(this.weights[0].length * 3);
+        const numPoints = this.weights[0].length;
+        const positions = new Float32Array(numPoints * 3);
+        const colors = new Float32Array(numPoints * 3);
 
-        for (let i = 0; i < this.weights[0].length; i++) {
-            // On additionne la multiplication des poids par les couleurs de chaque couche
+        for (let i = 0; i < numPoints; i++) {
             let r = 0, g = 0, b = 0;
             for (let j = 0; j < this.weights.length; j++) {
                 r += this.weights[j][i] * palette[j][0];
@@ -120,9 +157,9 @@ class ThreeSceneManager {
                 b += this.weights[j][i] * palette[j][2];
             }
 
-            positions[3 * i] = r / 255 - 0.5;
-            positions[3 * i + 1] = g / 255 - 0.5;
-            positions[3 * i + 2] = b / 255 - 0.5;
+            positions[3 * i] = r / 255 - CENTER_OFFSET;
+            positions[3 * i + 1] = g / 255 - CENTER_OFFSET;
+            positions[3 * i + 2] = b / 255 - CENTER_OFFSET;
 
             const color = new THREE.Color(r / 255, g / 255, b / 255);
             color.convertSRGBToLinear();
@@ -170,13 +207,13 @@ class ThreeSceneManager {
     }
 
     /**
-     * Construit un cube RGB avec lignes et arêtes.
+     * Construit un cube RGB avec axes et arêtes.
      */
     buildRgbCube() {
         const axes = new THREE.Object3D();
-        const offset = 0.5; // Décalage pour centrer le cube dans [-0.5, 0.5]
+        const offset = CENTER_OFFSET; // Pour centrer le cube dans [-0.5, 0.5]
 
-        // Axes et arêtes du cube
+        // Création des axes et arêtes du cube
         axes.add(this.createAxisLine(new THREE.Vector3(-offset, -offset, -offset), new THREE.Vector3(offset, -offset, -offset), new THREE.Color(0, 0, 0), new THREE.Color(1, 0, 0)));
         axes.add(this.createAxisLine(new THREE.Vector3(-offset, -offset, -offset), new THREE.Vector3(-offset, offset, -offset), new THREE.Color(0, 0, 0), new THREE.Color(0, 1, 0)));
         axes.add(this.createAxisLine(new THREE.Vector3(-offset, offset, -offset), new THREE.Vector3(offset, offset, -offset), new THREE.Color(0, 1, 0), new THREE.Color(1, 1, 0)));
@@ -217,9 +254,9 @@ class ThreeSceneManager {
             const b = imageData[4 * i + 2] / 255;
 
             // Positionnement dans l'espace RGB centré
-            positions[3 * i] = r - 0.5;
-            positions[3 * i + 1] = g - 0.5;
-            positions[3 * i + 2] = b - 0.5;
+            positions[3 * i] = r - CENTER_OFFSET;
+            positions[3 * i + 1] = g - CENTER_OFFSET;
+            positions[3 * i + 2] = b - CENTER_OFFSET;
 
             const color = new THREE.Color(r, g, b);
             color.convertSRGBToLinear();
@@ -245,7 +282,9 @@ class ThreeSceneManager {
      */
     createConvexHullCircles(vertices, faces, type = null) {
         if (!vertices || vertices.length === 0) return;
+        if (type !== null) this.displayedPalette = type;
 
+        // Stockage de l'enveloppe selon le type
         if (type === "simplified") {
             this.convexHulls.simplified = {vertices, faces};
         } else if (type === "initial") {
@@ -257,6 +296,7 @@ class ThreeSceneManager {
         if (this.overlayMesh.rims) this.scene.remove(this.overlayMesh.rims);
         if (this.overlayMesh.edges) this.scene.remove(this.overlayMesh.edges);
 
+        // Création des groupes d'overlay
         this.overlayMesh.circle = new THREE.Object3D();
         this.overlayMesh.rims = new THREE.Object3D();
         this.overlayMesh.edges = new THREE.Object3D();
@@ -268,20 +308,21 @@ class ThreeSceneManager {
         // Géométries et matériaux pour les cercles et contours
         const circleGeometry = new THREE.SphereGeometry(radius, segments, segments);
         const circleRimGeometry = new THREE.CircleGeometry(radiusRim, segments);
-        const circleRimMaterial = new THREE.MeshBasicMaterial({color: 0xFFFFFF});
+        const circleRimMaterial = new THREE.MeshBasicMaterial({color: 0xffffff});
 
+        // Création des cercles et contours pour chaque sommet
         vertices.forEach((vertex, index) => {
             // On crée le cercle pour chaque sommet
             const color = new THREE.Color(vertex[0], vertex[1], vertex[2]).convertSRGBToLinear();
             const circleMaterial = new THREE.MeshBasicMaterial({color});
             const circle = new THREE.Mesh(circleGeometry, circleMaterial);
-            circle.position.set(vertex[0] - 0.5, vertex[1] - 0.5, vertex[2] - 0.5);
+            circle.position.set(vertex[0] - CENTER_OFFSET, vertex[1] - CENTER_OFFSET, vertex[2] - CENTER_OFFSET);
             circle.userData.index = index;
             this.overlayMesh.circle.add(circle);
 
             // On crée le contour du cercle
             const rim = new THREE.Mesh(circleRimGeometry, circleRimMaterial);
-            rim.position.set(vertex[0] - 0.5, vertex[1] - 0.5, vertex[2] - 0.5);
+            rim.position.set(vertex[0] - CENTER_OFFSET, vertex[1] - CENTER_OFFSET, vertex[2] - CENTER_OFFSET);
             this.overlayMesh.rims.add(rim);
         });
 
@@ -293,9 +334,9 @@ class ThreeSceneManager {
 
         // Fonction locale pour ajouter une arête entre deux points
         const addEdgeToScene = (v1, v2) => {
-            const points = [v1, v2];
             const geometry = new LineGeometry();
-            const flatPoints = points.map(p => [p.x, p.y, p.z]).flat();
+            // Création d'un tableau plat de positions
+            const flatPoints = [v1.x, v1.y, v1.z, v2.x, v2.y, v2.z];
             geometry.setPositions(new Float32Array(flatPoints));
             geometry.setColors(new Float32Array([1, 1, 1, 1, 1, 1]));
             const line = new Line2(geometry, edgeMaterial);
@@ -308,14 +349,14 @@ class ThreeSceneManager {
                 const currentIndex = face[i];
                 const nextIndex = face[(i + 1) % face.length];
                 const v1 = new THREE.Vector3(
-                    vertices[currentIndex][0] - 0.5,
-                    vertices[currentIndex][1] - 0.5,
-                    vertices[currentIndex][2] - 0.5
+                    vertices[currentIndex][0] - CENTER_OFFSET,
+                    vertices[currentIndex][1] - CENTER_OFFSET,
+                    vertices[currentIndex][2] - CENTER_OFFSET
                 );
                 const v2 = new THREE.Vector3(
-                    vertices[nextIndex][0] - 0.5,
-                    vertices[nextIndex][1] - 0.5,
-                    vertices[nextIndex][2] - 0.5
+                    vertices[nextIndex][0] - CENTER_OFFSET,
+                    vertices[nextIndex][1] - CENTER_OFFSET,
+                    vertices[nextIndex][2] - CENTER_OFFSET
                 );
                 addEdgeToScene(v1, v2);
             }
@@ -352,18 +393,18 @@ class ThreeSceneManager {
         this.stats.update();
     }
 
-
     onMouseDown(event) {
+        // On vérifie que le nuage de points et l'enveloppe simplifiée sont présents
         if (this.weights.length !== this.convexHulls.simplified?.vertices.length) return;
+        if (this.displayedPalette === "initial") return;
 
         // On stocke le container pour les coordonnées (peu probable que la taille change alors que la souris est enfoncée)
-        const container = document.getElementById("webgl-output");
-        this.container = container;
+        this.container = document.getElementById("webgl-output");
         event.preventDefault();
 
         // On calcule la position de la souris dans l'espace 3D
-        this.mouse.x = ( event.offsetX / container.offsetWidth ) * 2 - 1;
-        this.mouse.y = - ( event.offsetY / container.offsetHeight ) * 2 + 1;
+        this.mouse.x = (event.offsetX / this.container.offsetWidth) * 2 - 1;
+        this.mouse.y = -(event.offsetY / this.container.offsetHeight) * 2 + 1;
 
         // On lance un rayon pour détecter les intersections avec les cercles
         this.raycaster.setFromCamera(this.mouse, this.camera);
@@ -371,6 +412,8 @@ class ThreeSceneManager {
 
         // On ne retient que le premier point intersect
         if (intersects.length > 0) {
+            // On change le pointeur de la souris
+            document.body.style.cursor = "grabbing";
             this.controls.enabled = false;
             this.selectedPoint = intersects[0].object;
         }
@@ -380,8 +423,14 @@ class ThreeSceneManager {
         if (!this.selectedPoint) return;
         event.preventDefault();
 
-        this.mouse.x = ( event.offsetX / this.container.offsetWidth ) * 2 - 1;
-        this.mouse.y = - ( event.offsetY / this.container.offsetHeight ) * 2 + 1;
+        if (!this.paletteChanged) {
+            this.paletteChanged = true;
+            document.getElementById("initial-palette").style.cursor = "not-allowed";
+            document.getElementById("simplified-palette").style.cursor = "default";
+        }
+
+        this.mouse.x = (event.offsetX / this.container.offsetWidth) * 2 - 1;
+        this.mouse.y = -(event.offsetY / this.container.offsetHeight) * 2 + 1;
         this.raycaster.setFromCamera(this.mouse, this.camera);
 
         // On crée un plan passant par la position du point et orienté selon la direction de la caméra
@@ -393,14 +442,16 @@ class ThreeSceneManager {
 
         if (intersectPoint) {
             const index = this.selectedPoint.userData.index;
-
-            // Mise à jour de la position du point
             this.selectedPoint.position.copy(intersectPoint);
 
-            // Mise à jour du tableau des vertices de l'enveloppe
-            this.convexHulls.simplified.vertices[index] = [intersectPoint.x + 0.5, intersectPoint.y + 0.5, intersectPoint.z + 0.5];
+            // Mise à jour des sommets de l'enveloppe simplifiée
+            this.convexHulls.simplified.vertices[index] = [
+                intersectPoint.x + CENTER_OFFSET,
+                intersectPoint.y + CENTER_OFFSET,
+                intersectPoint.z + CENTER_OFFSET,
+            ];
 
-            // Mise à jour du cercle
+            // Mise à jour du contour du cercle
             this.overlayMesh.rims.children[index].position.copy(intersectPoint);
 
             // Mise à jour des arêtes
@@ -409,30 +460,43 @@ class ThreeSceneManager {
                 const vertexIndex = i % 3;
                 const vertex = this.convexHulls.simplified.vertices[this.convexHulls.simplified.faces[faceIndex][vertexIndex]];
                 const nextVertex = this.convexHulls.simplified.vertices[this.convexHulls.simplified.faces[faceIndex][(vertexIndex + 1) % 3]];
-                line.geometry.setPositions([vertex[0] - 0.5, vertex[1] - 0.5, vertex[2] - 0.5, nextVertex[0] - 0.5, nextVertex[1] - 0.5, nextVertex[2] - 0.5]);
+                line.geometry.setPositions([
+                    vertex[0] - CENTER_OFFSET,
+                    vertex[1] - CENTER_OFFSET,
+                    vertex[2] - CENTER_OFFSET,
+                    nextVertex[0] - CENTER_OFFSET,
+                    nextVertex[1] - CENTER_OFFSET,
+                    nextVertex[2] - CENTER_OFFSET,
+                ]);
             });
 
-            // Mise à jour de la palette via paletteManager (il faut définir une méthode updateColorAt dans paletteManager)
+            // Calcul de la nouvelle couleur
             const newColor = [
-                Math.round((intersectPoint.x + 0.5) * 255),
-                Math.round((intersectPoint.y + 0.5) * 255),
-                Math.round((intersectPoint.z + 0.5) * 255)
+                Math.round((intersectPoint.x + CENTER_OFFSET) * 255),
+                Math.round((intersectPoint.y + CENTER_OFFSET) * 255),
+                Math.round((intersectPoint.z + CENTER_OFFSET) * 255),
             ];
 
+            // Mise à jour du point et de la palette
+            this.overlayMesh.circle.children[index].material.color.setRGB(
+                newColor[0] / 255,
+                newColor[1] / 255,
+                newColor[2] / 255
+            );
             this.paletteManager.updateColorAt(index, newColor);
             this.layerManager.updateLayer({
-                "id": index,
-                "weights": this.weights[index],
-            }, this.paletteManager.getPalettes()[1]);
+                    id: index,
+                    weights: this.weights[index],
+                }, this.paletteManager.getPalettes()[1]);
             this.layerManager.updateSumLayer(this.paletteManager.getPalettes()[1]);
             this.updatePointCloud();
         }
-
     }
 
     onMouseUp(event) {
         event.preventDefault();
         this.selectedPoint = null;
+        document.body.style.cursor = "auto";
         this.controls.enabled = true;
     }
 }
