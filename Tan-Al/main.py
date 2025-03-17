@@ -6,6 +6,7 @@ from flask_socketio import SocketIO, emit
 
 from image_decomposition import extract_rgbxy_weights
 from palette_simplification import simplify_convex_palette
+from palette_harmonization import harmonize_palette
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -64,7 +65,7 @@ def handle_upload_image(data):
     faces = palette['faces']
 
     # On envoie les données au client
-    emit('convex_hull', {'type':'simplified', 'vertices': vertices.tolist(), 'faces': faces.tolist()})
+    emit('convex_hull', {'type': 'simplified', 'vertices': vertices.tolist(), 'faces': faces.tolist()})
 
     # On vérifie si le client est toujours connecté pour éviter de calculer dans le vide
     if request.sid not in socketio.server.manager.rooms['/']:
@@ -72,6 +73,25 @@ def handle_upload_image(data):
 
     # On décompose l'image en couches pondérées selon la palette de couleurs
     extract_rgbxy_weights(vertices, pixels)
+    emit('thinking', {'thinking': False})
+
+
+@socketio.on("harmonize")
+def handle_harmonize(data):
+    """
+    Attendu : data contient une clé "palette" qui correspond à la palette de couleurs à harmoniser. (array de RGB)
+    """
+    emit('thinking', {'thinking': True})
+    palette = data.get('palette')
+    if not palette:
+        emit('error', {'message': 'Aucune palette fournie'})
+        return
+
+    # On harmonise la palette
+    harmonized = harmonize_palette(palette)
+
+    # On envoie les données au client
+    emit('harmonized', harmonized)
     emit('thinking', {'thinking': False})
 
 

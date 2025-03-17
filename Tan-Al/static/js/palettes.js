@@ -4,7 +4,8 @@ class PaletteManager {
     constructor() {
         this.initial = [];
         this.simplified = [];
-        this.originalSimplified = [];
+        this.harmonies = {};
+        this.selected = null;
 
         this.downloadButton = document.getElementById('download-palettes');
         this.downloadButton.addEventListener('click', () => {
@@ -13,12 +14,52 @@ class PaletteManager {
     }
 
     /**
-     * Récupère les palettes initiale et simplifiée.
+     * Récupère la palette sélectionnée.
      *
-     * @returns {Array<Array<Array<number>>>} - Un tableau contenant les palettes initiale et simplifiée, chacune représentée comme un tableau de couleurs RGB.
+     * @returns {Array<Array<number>>} - Un tableau contenant une palette représentée par un de couleurs RGB.
      */
-    getPalettes() {
-        return [this.initial, this.simplified];
+    getPalette() {
+        return JSON.parse(JSON.stringify(this.selected));
+    }
+
+    /**
+     * Récupère la palette initiale.
+     * @returns {Array<Array<number>>}
+     */
+    getOriginalSimplified() {
+        return this.simplified;
+    }
+
+    /**
+     * Récupère l'harmonie sélectionnée.
+     * @param {string} name - Le nom de l'harmonie.
+     */
+    getHarmonyAt(name) {
+        return this.harmonies[name];
+    }
+
+    /**
+     * Copie et sélectionne la palette demandée.
+     * @param name - Le nom de la palette à sélectionner : 'initial', 'simplified' ou le nom d'une harmonie.
+     */
+    selectPalette(name) {
+        if (name === 'initial') this.selected = JSON.parse(JSON.stringify(this.initial));
+        else if (name === 'simplified') this.selected = JSON.parse(JSON.stringify(this.simplified));
+        else if (name in this.harmonies) this.selected = JSON.parse(JSON.stringify(this.harmonies[name].palette));
+
+        // On met à jour les couleurs dans le DOM
+        const selectedPalette = document.getElementById('selected-palette');
+        for (let i = 0; i < selectedPalette.children.length; i++) {
+            selectedPalette.children[i].style.backgroundColor = `rgb(${this.selected[i][0]}, ${this.selected[i][1]}, ${this.selected[i][2]})`;
+        }
+    }
+
+    /**
+     * Récupère toutes les harmonies.
+     * @param harmonies
+     */
+    setHarmonies(harmonies) {
+        this.harmonies = harmonies;
     }
 
     /**
@@ -27,22 +68,11 @@ class PaletteManager {
      * @param {Array<number>} color - La nouvelle couleur RGB.
      */
     updateColorAt(index, color) {
-        this.simplified[index] = color;
+        this.selected[index] = color;
 
         // On met à jour la couleur dans le DOM
-        const simplifiedPalette = document.getElementById('simplified-palette');
-        simplifiedPalette.children[index].style.backgroundColor = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
-    }
-
-    /**
-     * Réinitialise la palette simplifiée avec les valeurs originales.
-     */
-    rollback() {
-        this.simplified = JSON.parse(JSON.stringify(this.originalSimplified));
-        const simplifiedPalette = document.getElementById('simplified-palette');
-        for (let i = 0; i < simplifiedPalette.children.length; i++) {
-            simplifiedPalette.children[i].style.backgroundColor = `rgb(${this.simplified[i][0]}, ${this.simplified[i][1]}, ${this.simplified[i][2]})`;
-        }
+        const selectedPalette = document.getElementById('selected-palette');
+        selectedPalette.children[index].style.backgroundColor = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
     }
 
     /**
@@ -55,10 +85,10 @@ class PaletteManager {
         // On affiche le titre et le conteneur de prévisualisation
         document.getElementById("palettes-title").classList.remove('hidden');
         document.getElementById("initial-palette").classList.remove('hidden');
-        document.getElementById("simplified-palette").classList.remove('hidden');
+        document.getElementById("selected-palette").classList.remove('hidden');
 
         const palette = vertices.map(v => [Math.round(v[0] * 255), Math.round(v[1] * 255), Math.round(v[2] * 255)]);
-        const paletteContainer = document.getElementById(type === 'initial' ? 'initial-palette' : 'simplified-palette');
+        const paletteContainer = document.getElementById(type === 'initial' ? 'initial-palette' : 'selected-palette');
 
         paletteContainer.innerHTML = '';
         palette.forEach(color => {
@@ -69,8 +99,8 @@ class PaletteManager {
 
         if (type === 'initial') this.initial = palette;
         else {
-            this.simplified = palette;
-            this.originalSimplified = JSON.parse(JSON.stringify(palette));
+            this.simplified = JSON.parse(JSON.stringify(palette))
+            this.selected = palette;
         }
     }
 
@@ -106,15 +136,15 @@ class PaletteManager {
 
         // On crée un canvas pour chaque type de palette
         const initialCanvas = this.generateCanvas(this.initial);
-        const simplifiedCanvas = this.generateCanvas(this.simplified);
+        const canvas = this.generateCanvas(this.selected);
 
         // On convertit les canvas en images PNG (data URL)
         const initialImage = initialCanvas.toDataURL('image/png');
-        const simplifiedImage = simplifiedCanvas.toDataURL('image/png');
+        const simplifiedImage = canvas.toDataURL('image/png');
 
         // On ajoute les images dans le fichier ZIP
         zip.file('palette-initial.png', initialImage.split(',')[1], {base64: true});
-        zip.file('palette-simplified.png', simplifiedImage.split(',')[1], {base64: true});
+        zip.file('palette-harmonized.png', simplifiedImage.split(',')[1], {base64: true});
 
         // On génère le fichier ZIP et le télécharge
         zip.generateAsync({type: 'blob'}).then(function (content) {

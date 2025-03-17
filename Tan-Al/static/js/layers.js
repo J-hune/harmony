@@ -75,9 +75,9 @@ class LayerManager {
      * @param {number} data.height - La hauteur de la couche
      * @param {number} data.id - L'identifiant de la couche
      * @param {Float32Array} data.weights - Les poids de la couche (tableau de flottants)
-     * @param simplifiedPalette - La palette simplifiée (tableau de couleurs)
+     * @param palette - La palette (tableau de couleurs)
      */
-    updateLayer(data, simplifiedPalette) {
+    updateLayer(data, palette) {
         // On affiche les éléments du DOM
         if (document.getElementById('layers-title').classList.contains('hidden')) {
             document.getElementById('layers-title').classList.remove('hidden');
@@ -92,7 +92,7 @@ class LayerManager {
         // ici on multiplie par la couleur de la palette mais c'est purement esthétique
         const width = data.width || this.width;
         const height = data.height || this.height;
-        const imageData = this.generateRGBAImageData(data.weights, width, height, simplifiedPalette[data.id]);
+        const imageData = this.generateRGBAImageData(data.weights, width, height, palette[data.id]);
 
         // On met à jour le canvas
         ctx.putImageData(imageData, 0, 0);

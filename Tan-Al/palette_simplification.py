@@ -1,10 +1,8 @@
-import numpy as np
-from scipy.spatial import ConvexHull, Delaunay
 import cvxopt
 import cvxopt.solvers
+import numpy as np
 from flask_socketio import emit
-
-from plot import send_intermediate_image
+from scipy.spatial import ConvexHull, Delaunay
 
 
 def compute_rmse(points, hull_points):
