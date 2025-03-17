@@ -69,7 +69,7 @@ function initSocket() {
 
     socket.on('layer_weights', (data) => {
         // data.width, data.height, data.id, data.weights (rgba array)
-        const simplifiedPalette = paletteManager.getPalettes()[1];
+        const simplifiedPalette = paletteManager.getPalette();
         layerManager.updateLayer(data, simplifiedPalette);
         threeSceneManager.addLayerWeights(data.weights, data.id);
 
@@ -81,7 +81,17 @@ function initSocket() {
 
             // On avertit l'utilisateur qu'il peut modifier les couleurs de la palette
             terminalManager.logMessage("💡 Information, vous pouvez modifier les couleurs de la palette en déplaçant les points de l'enveloppe convexe.", 'important');
+
+            // On réactive le bouton d'harmonisation
+            document.getElementById('harmonize').disabled = false;
         }
+    });
+
+    socket.on('harmonized', (data) => {
+        // On réactive tous les boutons d'harmonie, on prévient l'utilisateur et on stocke les harmonies
+        document.querySelectorAll('.harmony-button').forEach(button => button.disabled = false);
+        terminalManager.logMessage("Les palettes harmonisées ont été générées, vous pouvez les utiliser avec le panneau de droite.", 'important');
+        paletteManager.setHarmonies(data);
     });
 
     socket.on('error', (data) => {
@@ -94,7 +104,7 @@ function initSocket() {
  */
 function reset() {
     // On vide les conteneurs HTML
-    const idsToEmpty = ["initial-palette", "simplified-palette", "layers-container"];
+    const idsToEmpty = ["initial-palette", "selected-palette", "layers-container"];
     const doNotRemoveLast = ["layers-container"];
     idsToEmpty.forEach(id => {
         const container = document.getElementById(id);
@@ -109,7 +119,7 @@ function reset() {
     // On cache les éléments HTML
     const idsToHide = [
         "previews-title", "previews-container", "original-image", "harmonized-image",
-        "palettes-title", "initial-palette", "simplified-palette", "download-palettes",
+        "palettes-title", "initial-palette", "selected-palette", "download-palettes",
         "layers-title", "layers-container", "download-layers", "rollback-palette"
     ];
     idsToHide.forEach(id => {
@@ -120,6 +130,9 @@ function reset() {
     // On réinitialise l'image originale
     const originalImage = document.getElementById('original-image');
     originalImage.src = '';
+
+    // On désactive les boutons d'harmonie
+    document.querySelectorAll('.harmony-button').forEach(button => button.disabled = true);
 
     threeSceneManager.reset();
 }
@@ -177,22 +190,15 @@ function onImageUpload(file) {
 function initWebFeatures() {
     terminalManager.logMessage("👋 Bienvenue sur IlFautQueJeTrouveUnNom !", 'important');
 
+    // J'ai l'impression que le navigateur garde en cache les 'disabled' des boutons (dans le doute)
+    document.querySelectorAll('.harmony-button').forEach(button => button.disabled = true);
+    document.getElementById('harmonize').disabled = true;
+
     const input = document.getElementById('upload');
     const area = document.getElementById('drag-area');
+    const harmonizeButton = document.getElementById('harmonize');
 
-    document.body.addEventListener('click', (e) => {
-        // Si on clique sur une image, on propose de la télécharger (en full size)
-        if (e.target.tagName === 'IMG') {
-            const a = document.createElement('a');
-            a.href = e.target.src;
-            a.download = new Date().toISOString() + '.png';
-            a.click();
-
-            e.preventDefault(); // On empêche le navigateur de suivre le lien
-            a.remove(); // On supprime le lien après le téléchargement
-        }
-    });
-
+    /* ---------- Événements de la zone de drag & drop et de l'input ---------- */
     area.addEventListener('click', () => input.click());
 
     area.addEventListener('dragover', (e) => {
@@ -214,5 +220,25 @@ function initWebFeatures() {
     input.addEventListener('change', (e) => {
         const file = e.target.files[0];
         onImageUpload(file);
+    });
+
+    document.body.addEventListener('click', (e) => {
+        // Si on clique sur une image, on propose de la télécharger (en full size)
+        if (e.target.tagName === 'IMG') {
+            const a = document.createElement('a');
+            a.href = e.target.src;
+            a.download = new Date().toISOString() + '.png';
+            a.click();
+
+            e.preventDefault(); // On empêche le navigateur de suivre le lien
+            a.remove(); // On supprime le lien après le téléchargement
+        }
+    });
+
+    harmonizeButton.addEventListener('click', () => {
+        const simplifiedPalette = paletteManager.getOriginalSimplified();
+        socket.emit('harmonize', {palette: simplifiedPalette});
+        console.log("Demande d'harmonisation de la palette au serveur...");
+        terminalManager.logMessage("Demande d'harmonisation de la palette au serveur...");
     });
 }

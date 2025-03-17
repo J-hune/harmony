@@ -4,37 +4,74 @@ class TooltipsManager {
     constructor() {
         this.tooltips = [{
             target: document.getElementById('harmonize'),
-            element: null,
             text: 'Harmoniser les couleurs',
-            instance: null,
             offset: [0, 8],
             placement: 'left',
             delay: 300
         }, {
             target: document.getElementById('download-palettes'),
-            element: null,
             text: 'Télécharger les palettes',
-            instance: null,
             offset: [0, 8],
             placement: 'right',
-            delay: 300
+            delay: 400
         }, {
             target: document.getElementById('download-layers'),
-            element: null,
             text: 'Télécharger les layers',
-            instance: null,
             offset: [0, 8],
             placement: 'right',
-            delay: 300
+            delay: 400
         }, {
             target: document.getElementById('rollback-palette'),
-            element: null,
             text: 'Réinitialiser la palette',
-            instance: null,
             offset: [0, 8],
             placement: 'bottom-start',
-            delay: 200
+            delay: 300
         }];
+
+        // On ajoute les tooltips pour les harmonies
+        this.tooltips = this.tooltips.concat([{
+            target: document.getElementById('triadic-harmony'),
+            text: 'Harmonie triadique',
+            offset: [0, 8],
+            placement: 'left',
+            delay: 400
+        }, {
+            target: document.getElementById('complementary-harmony'),
+            text: 'Harmonie complémentaire',
+            offset: [0, 8],
+            placement: 'left',
+            delay: 400
+        }, {
+            target: document.getElementById('square-harmony'),
+            text: 'Harmonie en carré',
+            offset: [0, 8],
+            placement: 'left',
+            delay: 400
+        }, {
+            target: document.getElementById('split-harmony'),
+            text: 'Harmonie divisée',
+            offset: [0, 8],
+            placement: 'left',
+            delay: 400
+        }, {
+            target: document.getElementById('double-split-harmony'),
+            text: 'Harmonie doublement divisée',
+            offset: [0, 8],
+            placement: 'left',
+            delay: 400
+        }, {
+            target: document.getElementById('analogous-harmony'),
+            text: 'Harmonie analogue',
+            offset: [0, 8],
+            placement: 'left',
+            delay: 400
+        }, {
+            target: document.getElementById('monochromatic-harmony'),
+            text: 'Harmonie monochromatique',
+            offset: [0, 8],
+            placement: 'left',
+            delay: 400
+        }]);
     }
 
     /**
@@ -66,6 +103,9 @@ class TooltipsManager {
             let showTimeout;
             function show() {
                 showTimeout = setTimeout(() => {
+                    // On ignore si l'élément a l'attribut disabled
+                    if (tooltip.target.hasAttribute('disabled')) return;
+
                     tooltip.element.setAttribute('data-show', '');
 
                     tooltip.instance.setOptions((options) => ({
