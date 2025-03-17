@@ -2,76 +2,19 @@ import {createPopper} from "popper.js"
 
 class TooltipsManager {
     constructor() {
-        this.tooltips = [{
-            target: document.getElementById('harmonize'),
-            text: 'Harmoniser les couleurs',
-            offset: [0, 8],
-            placement: 'left',
-            delay: 300
-        }, {
-            target: document.getElementById('download-palettes'),
-            text: 'Télécharger les palettes',
-            offset: [0, 8],
-            placement: 'right',
-            delay: 400
-        }, {
-            target: document.getElementById('download-layers'),
-            text: 'Télécharger les layers',
-            offset: [0, 8],
-            placement: 'right',
-            delay: 400
-        }, {
-            target: document.getElementById('rollback-palette'),
-            text: 'Réinitialiser la palette',
-            offset: [0, 8],
-            placement: 'bottom-start',
-            delay: 300
-        }];
-
-        // On ajoute les tooltips pour les harmonies
-        this.tooltips = this.tooltips.concat([{
-            target: document.getElementById('triadic-harmony'),
-            text: 'Harmonie triadique',
-            offset: [0, 8],
-            placement: 'left',
-            delay: 400
-        }, {
-            target: document.getElementById('complementary-harmony'),
-            text: 'Harmonie complémentaire',
-            offset: [0, 8],
-            placement: 'left',
-            delay: 400
-        }, {
-            target: document.getElementById('square-harmony'),
-            text: 'Harmonie en carré',
-            offset: [0, 8],
-            placement: 'left',
-            delay: 400
-        }, {
-            target: document.getElementById('split-harmony'),
-            text: 'Harmonie divisée',
-            offset: [0, 8],
-            placement: 'left',
-            delay: 400
-        }, {
-            target: document.getElementById('double-split-harmony'),
-            text: 'Harmonie doublement divisée',
-            offset: [0, 8],
-            placement: 'left',
-            delay: 400
-        }, {
-            target: document.getElementById('analogous-harmony'),
-            text: 'Harmonie analogue',
-            offset: [0, 8],
-            placement: 'left',
-            delay: 400
-        }, {
-            target: document.getElementById('monochromatic-harmony'),
-            text: 'Harmonie monochromatique',
-            offset: [0, 8],
-            placement: 'left',
-            delay: 400
-        }]);
+        this.tooltips = [
+            {id: "harmonize", text: "Harmoniser les couleurs", placement: "left", delay: 300},
+            {id: "download-palettes", text: "Télécharger les palettes", placement: "right", delay: 400},
+            {id: "download-layers", text: "Télécharger les layers", placement: "right", delay: 400},
+            {id: "rollback-palette", text: "Réinitialiser la palette", placement: "bottom-start", delay: 300},
+            {id: "triadic-harmony", text: "Harmonie triadique", placement: "left", delay: 400},
+            {id: "complementary-harmony", text: "Harmonie complémentaire", placement: "left", delay: 400},
+            {id: "square-harmony", text: "Harmonie en carré", placement: "left", delay: 400},
+            {id: "split-harmony", text: "Harmonie divisée", placement: "left", delay: 400},
+            {id: "double-split-harmony", text: "Harmonie doublement divisée", placement: "left", delay: 400},
+            {id: "analogous-harmony", text: "Harmonie analogue", placement: "left", delay: 400},
+            {id: "monochromatic-harmony", text: "Harmonie monochromatique", placement: "left", delay: 400}
+        ];
     }
 
     /**
@@ -80,6 +23,7 @@ class TooltipsManager {
     init() {
         this.tooltips.forEach(tooltip => {
             // On crée l'élément du tooltip
+            tooltip.target = document.getElementById(tooltip.id);
             tooltip.element = document.createElement('div');
             tooltip.element.className = 'tooltip';
             tooltip.element.role = 'tooltip';
@@ -90,21 +34,16 @@ class TooltipsManager {
             // On crée l'instance du tooltip
             tooltip.instance = createPopper(tooltip.target, tooltip.element, {
                 placement: tooltip.placement,
-                modifiers: [
-                    {
-                        name: 'offset',
-                        options: {
-                            offset: tooltip.offset,
-                        },
-                    },
-                ],
+                modifiers: [{name: "offset", options: {offset: [0, 8]}}]
             });
+            tooltip.instance.update();
 
             let showTimeout;
             function show() {
                 showTimeout = setTimeout(() => {
                     // On ignore si l'élément a l'attribut disabled
                     if (tooltip.target.hasAttribute('disabled')) return;
+                    if (!tooltip.target.matches(':hover')) return;
 
                     tooltip.element.setAttribute('data-show', '');
 
@@ -134,16 +73,11 @@ class TooltipsManager {
                 }));
             }
 
-            const showEvents = ['mouseenter', 'focus'];
-            const hideEvents = ['mouseleave', 'blur'];
+            const showEvents = ["mouseenter", "focus"];
+            const hideEvents = ["pointerleave", "blur"];
 
-            showEvents.forEach((event) => {
-                tooltip.target.addEventListener(event, show);
-            });
-
-            hideEvents.forEach((event) => {
-                tooltip.target.addEventListener(event, hide);
-            });
+            showEvents.forEach((event) => tooltip.target.addEventListener(event, show));
+            hideEvents.forEach((event) => tooltip.target.addEventListener(event, hide));
         });
     }
 }
