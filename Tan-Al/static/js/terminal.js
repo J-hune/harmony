@@ -54,11 +54,12 @@ class TerminalManager {
      */
     logMessage(message, type = 'info') {
         const p = document.createElement('p');
-        p.textContent = message;
+        p.innerHTML = message;
         if (type === 'error') p.style.color = 'red';
         if (type === 'important') {
             let style = window.getComputedStyle(document.body)
             p.style.fontWeight = 'bold';
+            p.style.fontSize = '13px';
             p.style.color = style.getPropertyValue('--primary-color');
         }
 

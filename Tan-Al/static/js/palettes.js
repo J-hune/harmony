@@ -13,6 +13,13 @@ class PaletteManager {
         });
     }
 
+    reset() {
+        this.initial = [];
+        this.simplified = [];
+        this.harmonies = {};
+        this.selected = null;
+    }
+
     /**
      * Récupère la palette sélectionnée.
      *

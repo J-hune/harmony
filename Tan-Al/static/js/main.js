@@ -37,7 +37,6 @@ function initSocket() {
             terminalManager.logMessage('Erreur reçue du serveur : ' + msg.error, 'error');
         } else {
             console.log('Message du serveur :', msg.data);
-            terminalManager.logMessage('Message du serveur : ' + msg.data);
         }
     });
 
@@ -90,7 +89,32 @@ function initSocket() {
     socket.on('harmonized', (data) => {
         // On réactive tous les boutons d'harmonie, on prévient l'utilisateur et on stocke les harmonies
         document.querySelectorAll('.harmony-button').forEach(button => button.disabled = false);
-        terminalManager.logMessage("Les palettes harmonisées ont été générées, vous pouvez les utiliser avec le panneau de droite.", 'important');
+
+        // On trouve la palette harmonisée avec la meilleure note (attention data est un dictionnaire)
+        const bestPalette = Object.keys(data).reduce((best, key) => {
+            if (data[key].rate > data[best].rate) {
+                return key;
+            }
+            return best;
+        });
+
+        const names = {
+            "triadic-harmony": "Harmonie triadique",
+            "complementary-harmony": "Harmonie complémentaire",
+            "square-harmony": "Harmonie en carré",
+            "split-harmony": "Harmonie divisée",
+            "double-split-harmony": "Harmonie doublement divisée",
+            "analogous-harmony": "Harmonie analogue",
+            "monochromatic-harmony": "Harmonie monochromatique"
+        }
+
+        const randomId = Math.floor(Math.random() * 1000000);
+        terminalManager.logMessage("Les palettes harmonisées ont été générées, celle qui a la meilleure note est celle " +
+            "qui suit l'<button id='" + randomId + "' class='terminal-button'>👑 " + names[bestPalette] + "</button>", 'important');
+
+        // On ajoute un listener
+        const button = document.getElementById(randomId);
+        threeSceneManager.addHarmonyButtonListener(button, bestPalette);
         paletteManager.setHarmonies(data);
     });
 
@@ -133,8 +157,10 @@ function reset() {
 
     // On désactive les boutons d'harmonie
     document.querySelectorAll('.harmony-button').forEach(button => button.disabled = true);
+    document.getElementById('harmonize').disabled = true;
 
     threeSceneManager.reset();
+    paletteManager.reset();
 }
 
 /**

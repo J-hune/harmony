@@ -3,17 +3,17 @@ import {createPopper} from "popper.js"
 class TooltipsManager {
     constructor() {
         this.tooltips = [
-            {id: "harmonize", text: "Harmoniser les couleurs", placement: "left", delay: 300},
+            {id: "harmonize", text: "Harmoniser les couleurs", placement: "left", delay: 200},
             {id: "download-palettes", text: "Télécharger les palettes", placement: "right", delay: 400},
             {id: "download-layers", text: "Télécharger les layers", placement: "right", delay: 400},
             {id: "rollback-palette", text: "Réinitialiser la palette", placement: "bottom-start", delay: 300},
-            {id: "triadic-harmony", text: "Harmonie triadique", placement: "left", delay: 400},
-            {id: "complementary-harmony", text: "Harmonie complémentaire", placement: "left", delay: 400},
-            {id: "square-harmony", text: "Harmonie en carré", placement: "left", delay: 400},
-            {id: "split-harmony", text: "Harmonie divisée", placement: "left", delay: 400},
-            {id: "double-split-harmony", text: "Harmonie doublement divisée", placement: "left", delay: 400},
-            {id: "analogous-harmony", text: "Harmonie analogue", placement: "left", delay: 400},
-            {id: "monochromatic-harmony", text: "Harmonie monochromatique", placement: "left", delay: 400}
+            {id: "triadic-harmony", text: "Harmonie triadique", placement: "left"},
+            {id: "complementary-harmony", text: "Harmonie complémentaire", placement: "left"},
+            {id: "square-harmony", text: "Harmonie en carré", placement: "left"},
+            {id: "split-harmony", text: "Harmonie divisée", placement: "left"},
+            {id: "double-split-harmony", text: "Harmonie doublement divisée", placement: "left"},
+            {id: "analogous-harmony", text: "Harmonie analogue", placement: "left"},
+            {id: "monochromatic-harmony", text: "Harmonie monochromatique", placement: "left"}
         ];
     }
 

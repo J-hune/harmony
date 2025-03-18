@@ -1,0 +1,98 @@
+@font-face {
+    font-family: Poppins;
+    src: url(../fonts/Poppins-Regular.ttf);
+}
+
+@font-face {
+    font-family: Poppins;
+    src: url(../fonts/Poppins-Medium.ttf);
+    font-weight: 500;
+}
+
+html, body {
+    height: 100vh;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: black;
+    font-family: 'Poppins', sans-serif;
+}
+
+#webgl-output {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: black;
+    z-index: -1;
+}
+
+.container {
+    margin: 0 100px;
+    width: auto;
+    position: relative;
+    top: 48%;
+    font-size: 5vmin;
+}
+
+.container h1 {
+    margin: 0;
+    width: 100%;
+    color: #3f5a8c;
+    font-size: 1em;
+}
+
+.container h2 {
+    margin: 0.5em 0;
+    width: 100%;
+    color: #a9afb9;
+    font-size: 0.5em;
+}
+
+#start {
+    background-image: radial-gradient(66.11% 66.11% at 50% 33.89%, hsla(0, 0%, 100%, .4) 0, hsla(0, 0%, 100%, 0) 100%),
+    linear-gradient(278.88deg, #fff, #66e3ff 28.83%, #a787ff 56.31%, #ffc875 86.49%);
+    padding: 0.7rem 1.2rem;
+    color: #000;
+    margin-top: 1.2em;
+    font-size: 0.42em;
+    font-weight: normal;
+    border: none;
+    cursor: pointer;
+    border-radius: 99em;
+    transition-duration: .2s;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: rgba(23, 26, 33, 0.7) 0 1px 4px;
+}
+
+#start:hover {
+    transform: translateY(-1px);
+    background-image: radial-gradient(66.11% 66.11% at 50% 33.89%, hsla(0, 0%, 100%, .6) 0, hsla(0, 0%, 100%, 0) 100%),
+    linear-gradient(278.88deg, #fff, #66e3ff 28.83%, #a787ff 56.31%, #ffc875 86.49%);
+}
+
+@media (max-width: 1024px) {
+    .container {
+        top: 46%;
+        width: auto;
+        padding: 0 5vw;
+        margin: 0 auto;
+        font-size: 5.8vmin;
+    }
+
+    #start {
+        margin-top: 1.4em;
+        padding: 1rem 2rem;
+    }
+}
+
+@media (max-width: 512px) {
+    .container {
+        width: auto;
+        padding: 0 4vw;
+        margin: 0 auto;
+    }
+}

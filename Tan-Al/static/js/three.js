@@ -114,19 +114,7 @@ class ThreeSceneManager {
         });
 
         document.querySelectorAll(".harmony-button").forEach((button) => {
-            button.addEventListener("click", () => {
-                const harmony = this.paletteManager.getHarmonyAt(button.id);
-                if (harmony && !button.disabled) {
-                    this.paletteManager.selectPalette(button.id);
-                    this.rollback(button.id);
-                    if (!this.paletteChanged) {
-                        this.paletteChanged = true;
-                        document.getElementById("initial-palette").style.cursor = "not-allowed";
-                        document.getElementById("selected-palette").style.cursor = "default";
-                        document.getElementById("rollback-palette").classList.remove("hidden");
-                    }
-                }
-            });
+            this.addHarmonyButtonListener(button);
         });
     }
 
@@ -164,6 +152,7 @@ class ThreeSceneManager {
         this.stats.dom.style.top = "0";
         this.stats.dom.style.right = "0";
         this.stats.dom.style.left = "auto";
+        this.stats.dom.style.opacity = 0.2;
         container.parentElement.appendChild(this.stats.dom);
 
         // Gestion des événements
@@ -511,6 +500,23 @@ class ThreeSceneManager {
                 "initial"
             );
         }
+    }
+
+    addHarmonyButtonListener(button, id = null) {
+        button.addEventListener("click", () => {
+            const buttonId = id || button.id;
+            const harmony = this.paletteManager.getHarmonyAt(id || buttonId);
+            if (harmony && !button.disabled) {
+                this.paletteManager.selectPalette(buttonId);
+                this.rollback(buttonId);
+                if (!this.paletteChanged) {
+                    this.paletteChanged = true;
+                    document.getElementById("initial-palette").style.cursor = "not-allowed";
+                    document.getElementById("selected-palette").style.cursor = "default";
+                    document.getElementById("rollback-palette").classList.remove("hidden");
+                }
+            }
+        });
     }
 
     rollback(palette = null) {
