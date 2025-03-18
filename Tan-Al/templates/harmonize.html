@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Harmonisation</title>
+    <link rel="stylesheet" href="../static/css/style.css">
+</head>
+<body>
+<div class="container">
+    <div class="settings">
+        <h3>Charger votre Image</h3>
+        <div class="drag-area" id="drag-area">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" fill="currentColor">
+                <path d="M160 32c-35.3 0-64 28.7-64 64l0 224c0 35.3 28.7 64 64 64l352 0c35.3 0 64-28.7 64-64l0-224c0-35.3-28.7-64-64-64L160 32zM396 138.7l96 144c4.9 7.4 5.4 16.8 1.2 24.6S480.9 320 472 320l-144 0-48 0-80 0c-9.2 0-17.6-5.3-21.6-13.6s-2.9-18.2 2.9-25.4l64-80c4.6-5.7 11.4-9 18.7-9s14.2 3.3 18.7 9l17.3 21.6 56-84C360.5 132 368 128 376 128s15.5 4 20 10.7zM192 128a32 32 0 1 1 64 0 32 32 0 1 1 -64 0zM48 120c0-13.3-10.7-24-24-24S0 106.7 0 120L0 344c0 75.1 60.9 136 136 136l320 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-320 0c-48.6 0-88-39.4-88-88l0-224z"/>
+            </svg>
+            <span class="header">Drag & drop pour <span class="primary">Charger</span> une Image</span>
+            <span class="support">Formats supportés: jpg, jpeg, png, webp</span>
+        </div>
+        <input type="file" id="upload" accept="image/*" style="display: none;">
+
+        <h3 class="hidden" id="previews-title">Prévisualisation</h3>
+        <div class="hidden previews-container" id="previews-container">
+            <img id="original-image" class="hidden" alt="Image originale" src="">
+            <canvas id="harmonized-image" class="hidden"></canvas>
+        </div>
+
+        <h3 class="hidden" id="palettes-title">Palettes avant et après simplification</h3>
+        <div class="palettes-container" id="palettes-container">
+            <div class="hidden" id="initial-palette">
+                <!-- La palette de couleurs initiale apparaîtra ici -->
+            </div>
+            <div class="hidden" id="selected-palette">
+                <!-- La palette de couleurs simplifiée apparaîtra ici -->
+            </div>
+            <div class="palettes-actions">
+                <div class="hidden" id="rollback-palette">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor">
+                        <path d="M480 256c0 123.4-100.5 223.9-223.9 223.9c-48.86 0-95.19-15.58-134.2-44.86c-14.14-10.59-17-30.66-6.391-44.81c10.61-14.09 30.69-16.97 44.8-6.375c27.84 20.91 61 31.94 95.89 31.94C344.3 415.8 416 344.1 416 256s-71.67-159.8-159.8-159.8C205.9 96.22 158.6 120.3 128.6 160H192c17.67 0 32 14.31 32 32S209.7 224 192 224H48c-17.67 0-32-14.31-32-32V48c0-17.69 14.33-32 32-32s32 14.31 32 32v70.23C122.1 64.58 186.1 32.11 256.1 32.11C379.5 32.11 480 132.6 480 256z"/>
+                    </svg>
+                </div>
+                <div class="hidden" id="download-palettes">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" fill="currentColor">
+                        <path d="M448 416v-64c0-17.67-14.33-32-32-32s-32 14.33-32 32v64c0 17.67-14.33 32-32 32H96c-17.67 0-32-14.33-32-32v-64c0-17.67-14.33-32-32-32s-32 14.33-32 32v64c0 53.02 42.98 96 96 96h256C405 512 448 469 448 416zM246.6 342.6l128-128c12.51-12.51 12.49-32.76 0-45.25c-12.5-12.5-32.75-12.5-45.25 0L256 242.8V32c0-17.69-14.31-32-32-32S192 14.31 192 32v210.8L118.6 169.4c-12.5-12.5-32.75-12.5-45.25 0s-12.5 32.75 0 45.25l128 128C213.9 355.1 234.1 355.1 246.6 342.6z"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <h3 class="hidden" id="layers-title">Image décomposée</h3>
+        <div class="layers-container hidden" id="layers-container">
+            <!-- Les différentes couches de l'image -->
+            <div class="hidden" id="download-layers">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" fill="currentColor">
+                    <path d="M448 416v-64c0-17.67-14.33-32-32-32s-32 14.33-32 32v64c0 17.67-14.33 32-32 32H96c-17.67 0-32-14.33-32-32v-64c0-17.67-14.33-32-32-32s-32 14.33-32 32v64c0 53.02 42.98 96 96 96h256C405 512 448 469 448 416zM246.6 342.6l128-128c12.51-12.51 12.49-32.76 0-45.25c-12.5-12.5-32.75-12.5-45.25 0L256 242.8V32c0-17.69-14.31-32-32-32S192 14.31 192 32v210.8L118.6 169.4c-12.5-12.5-32.75-12.5-45.25 0s-12.5 32.75 0 45.25l128 128C213.9 355.1 234.1 355.1 246.6 342.6z"/>
+                </svg>
+            </div>
+        </div>
+    </div>
+    <div class="content">
+        <div id="webgl-output"></div>
+        <div id="terminal-container" class="terminal-container">
+            <div id="terminal">
+                <!-- Les messages de la console apparaîtront ici -->
+            </div>
+        </div>
+        <div id="terminal-slider"></div>
+    </div>
+    <div class="harmonize">
+        <button id="harmonize" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" fill="currentColor">
+                <path d="M91.61 204.3c1.016 2.043 3.697 3.695 5.977 3.695c.0078 0-.0078 0 0 0C99.86 207.1 102.5 206.3 103.5 204.3l20.72-49.63l49.62-20.71c2.023-1.012 3.664-3.676 3.676-5.938C177.5 125.8 175.9 123 173.9 122L124.5 101.4L124.1 101L103.5 51.7C102.5 49.66 99.86 48.02 97.59 48c-.0078 0 .0078 0 0 0c-2.279 0-4.966 1.647-5.981 3.69L70.91 101.3L21.27 122C19.24 123.1 17.59 125.7 17.59 127.1c0 2.266 1.652 4.949 3.682 5.965l49.64 20.7L91.61 204.3zM225.6 63.1l12.42 29.78C238.6 95.01 240.2 96 241.6 96s2.967-.9941 3.576-2.219L257.6 63.1l29.78-12.42c1.219-.6094 2.211-2.221 2.211-3.58c0-1.365-.9922-2.967-2.211-3.576L257.6 32L245.2 2.217C244.6 .9902 242.1 0 241.6 0S238.6 .9902 238 2.217L225.6 32L195.8 44.42C194.6 45.03 193.6 46.63 193.6 47.1c0 1.359 .9922 2.971 2.209 3.58L225.6 63.1zM529.9 48l-33.92-33.94c-18.74-18.75-49.14-18.75-67.88-.002L46.06 396.1c-18.75 18.74-18.75 49.13-.0039 67.88l33.93 33.95c18.74 18.75 49.14 18.75 67.88 .0039L529.9 115.9C548.7 97.13 548.7 66.75 529.9 48zM379.3 187.3l-22.63-22.63l105.4-105.4l22.66 22.63L379.3 187.3zM525.9 378l-49.57-20.67l-20.77-49.67C454.5 305.7 451.9 304 449.6 304c-2.281 0-4.949 1.652-5.965 3.695l-20.7 49.63l-49.64 20.71c-2.027 1.016-3.676 3.68-3.68 5.955c.0039 2.262 1.654 4.957 3.68 5.971l49.57 20.67l20.77 49.67C444.6 462.3 447.3 464 449.6 464c2.277 0 4.943-1.656 5.959-3.699l20.7-49.63l49.65-20.71c2.027-1.014 3.676-3.693 3.68-5.955C529.6 381.7 527.9 379.1 525.9 378z"/>
+            </svg>
+        </button>
+        <hr>
+        <button id="triadic-harmony" class="harmony-button" disabled>
+            <img src="../static/img/triad.png" alt="Harmony Triadic">
+        </button>
+        <button id="complementary-harmony" class="harmony-button" disabled>
+            <img src="../static/img/complementary.png" alt="Harmony Triadic">
+        </button>
+        <button id="square-harmony" class="harmony-button" disabled>
+            <img src="../static/img/square.png" alt="Harmony Square">
+        </button>
+        <button id="split-harmony" class="harmony-button" disabled>
+            <img src="../static/img/split.png" alt="Harmony Split">
+        </button>
+        <button id="double-split-harmony" class="harmony-button" disabled>
+            <img src="../static/img/double-split.png" alt="Harmony Double Split">
+        </button>
+        <button id="analogous-harmony" class="harmony-button" disabled>
+            <img src="../static/img/analogous.png" alt="Harmony Analogous">
+        </button>
+        <button id="monochromatic-harmony" class="harmony-button" disabled>
+            <img src="../static/img/monochromatic.png" alt="Harmony Monochromatic">
+        </button>
+    </div>
+</div>
+
+
+<!-- ImportMap pour charger les modules depuis CDN -->
+<script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.js",
+        "three/": "https://cdn.jsdelivr.net/npm/three@0.172.0/",
+        "stats": "https://cdnjs.cloudflare.com/ajax/libs/stats.js/r17/Stats.min.js",
+        "socket.io": "https://cdn.socket.io/4.8.1/socket.io.esm.min.js",
+        "jszip": "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm",
+        "popper.js": "https://unpkg.com/@popperjs/core@2/dist/esm"
+      }
+    }
+</script>
+
+<script type="module" src="../static/js/main.js"></script>
+</body>
+</html>

@@ -17,6 +17,13 @@ socketio = SocketIO(app, cors_allowed_origins="*")  # Pour autoriser les connexi
 def index():
     return render_template('index.html')  # La page HTML qui contiendra le code client
 
+@app.route('/harmonize')
+def harmonize():
+    return render_template('harmonize.html')
+
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('index.html'), 404
 
 @socketio.on('connect')
 def handle_connect():
@@ -96,4 +103,4 @@ def handle_harmonize(data):
 
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True, allow_unsafe_werkzeug=True)
+    socketio.run(app, debug=True, allow_unsafe_werkzeug=True, host="0.0.0.0")

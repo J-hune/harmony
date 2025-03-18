@@ -167,7 +167,6 @@ def plot_palette_on_circle(palette, title="Palette harmonisée"):
         ax.scatter(hue_rad, r, color=color, s=200, edgecolors='black', zorder=3)
         ax.text(hue_rad, r + 0.2, f"{int(hue)}°", horizontalalignment='center', verticalalignment='center', fontsize=10)
 
-    print(palette_debug, title)
     # Réglages des axes
     ticks = np.deg2rad(np.arange(0, 360, 30))
     ax.set_xticks(ticks)
@@ -274,7 +273,7 @@ def harmonize_palette(palette, plot=False):
         "monochrome", "complementary", "triad", "square", "analogous",
         "single split" et "double split") et chaque valeur est un dictionnaire contenant :
           - "palette" : la nouvelle palette harmonisée (en RGB dans [0,1])
-          - "taux"   : le taux d'optimalité, défini ici comme 1/(1 + distance moyenne)
+          - "rate"   : le taux d'optimalité, défini ici comme 1/(1 + distance moyenne)
 
     On convertit d'abord la palette de RGB vers LCh.
     Pour les templates à 1 degré de liberté, on effectue une recherche brute
@@ -296,7 +295,6 @@ def harmonize_palette(palette, plot=False):
 
     # On normalise la palette [255,255,255] → [1,1,1]
     palette_float = [[r / 255, g / 255, b / 255] for r, g, b in palette]
-    print(palette_float)
 
     # On convertit la palette d'entrée de RGB vers LCh.
     lch_palette = [rgb_to_lch(col) for col in palette_float]
@@ -328,6 +326,6 @@ def harmonize_palette(palette, plot=False):
         new_palette = [[round(r * 255), round(g * 255), round(b * 255)] for r, g, b in new_palette]
 
         # Le taux d'optimalité est défini comme 1/(1 + distance moyenne).
-        taux = 1 / (1 + best_D)
-        result[template_name] = {"palette": new_palette, "taux": taux}
+        rate = 1 / (1 + best_D)
+        result[template_name] = {"palette": new_palette, "rate": rate}
     return result
