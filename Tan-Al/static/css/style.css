@@ -371,6 +371,7 @@ body {
     border: none;
     padding: 6px;
     border-radius: 12px;
+    cursor: pointer;
     background-color: var(--three-background-color);
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     overflow: hidden; /* Empêche le dépassement du border */
