@@ -2,17 +2,27 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Harmonisation</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Une application d'harmonisation d'images basée sur l'algorithme de décomposition d'image de Tan et al. (2018) : importez une image, générez une palette optimisée, modifiez-la en 3D et obtenez des harmonisations (complémentaire, triadique, split, monochrome,...).">
+    <meta name="keywords" content="décomposition d'image, palette de couleurs, harmonisation d'images, transfert de couleurs, Tan 2018, traitement d'image">
+    <meta name="author" content="Donovann Zassot - Jhune">
+
+    <link rel="apple-touch-icon" sizes="180x180" href="../static/favicons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="../static/favicons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="../static/favicons/favicon-16x16.png">
+    <link rel="manifest" href="../static/favicons/site.webmanifest">
+
+    <title>Harmonisation d'images</title>
     <link rel="stylesheet" href="../static/css/homepage.css">
 </head>
 <div id="webgl-output"></div>
 <div class="container">
-    <h1>🪄 Harmonisation d'images</h1>
+    <h1><img src="../static/img/wand.png" alt="🪄">Harmonisation d'images</h1>
     <h2>Cette application est basée sur l'article de Tan, J., Echevarria, J. I., & Gingold, Y. I. (2018) <br>
-        “Palette-based image decomposition, harmonization, and color transfer”
+        <a href="https://dl.acm.org/doi/10.1145/3272127.3275054" target="_blank" rel="noopener noreferrer">“Palette-based image decomposition, harmonization, and color transfer”</a>
     </h2>
 
-    <button id="start">Accéder à l'application</button>
+    <button id="start" aria-label="Accéder à l'application">Accéder à l'application</button>
 </div>
 <body>
 
@@ -26,6 +36,6 @@
     }
 </script>
 
-<script type="module" src="../static/js/homepage.js"></script>
+<script type="module" src="../static/js/homepage.js" defer></script>
 </body>
 </html>

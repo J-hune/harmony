@@ -17,9 +17,9 @@ socketio = SocketIO(app, cors_allowed_origins="*")  # Pour autoriser les connexi
 def index():
     return render_template('index.html')  # La page HTML qui contiendra le code client
 
-@app.route('/harmonize')
+@app.route('/app')
 def harmonize():
-    return render_template('harmonize.html')
+    return render_template('app.html')
 
 @app.errorhandler(404)
 def page_not_found(e):
