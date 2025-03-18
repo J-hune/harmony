@@ -17,15 +17,31 @@ const terminalManager = new TerminalManager(threeSceneManager);
 // Initialisation des managers et de la connexion Socket.IO
 threeSceneManager.init();
 initWebFeatures();
-initSocket();
 tooltipsManager.init();
+
+// On initialise la connexion Socket.IO
+await fetch('/get_socket_id')
+    .then(response => response.json())
+    .then(data => {
+        let windowName = window.location.href.split('/')[2];
+        if (windowName.includes(':')) {
+            windowName = windowName.split(':')[0];
+        }
+
+        if (data.socket_id) {
+            socket = io.connect(windowName, {path: '/' + data.socket_id + '/socket.io/'});
+            initSocket();
+        } else {
+            socket = io.connect('http://' + windowName + ':' + data.socket_port, { path: '/socket.io/' });
+            initSocket();
+        }
+    })
+    .catch(error => console.error('Erreur lors de la récupération du port WebSocket:', error));
 
 /**
  * Initialise la connexion Socket.IO et définit les gestionnaires d'événements.
  */
 function initSocket() {
-    socket = io();
-
     socket.on('connect', () => {
         console.log('Connecté au serveur via WebSocket');
         terminalManager.logMessage('Connecté au serveur via WebSocket');
@@ -187,6 +203,13 @@ function onImageUpload(file) {
 
     const reader = new FileReader();
     reader.onload = (event) => {
+        // On vérifie que la taille de l'image est inférieure à 5 Mo
+        if (event.target.result.length > 5 * 1024 * 1024) {
+            console.error('L\'image est trop grande (5 Mo max)');
+            terminalManager.logMessage('L\'image est trop grande (5 Mo max)', 'error');
+            return;
+        }
+
         const img = new Image();
         img.onload = () => {
             // On affiche le titre et le conteneur de prévisualisation
@@ -244,6 +267,7 @@ function initWebFeatures() {
     });
 
     input.addEventListener('change', (e) => {
+        e.preventDefault()
         const file = e.target.files[0];
         onImageUpload(file);
     });
