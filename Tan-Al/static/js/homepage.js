@@ -2,10 +2,12 @@ import * as THREE from "three";
 import {OrbitControls} from "three/examples/jsm/controls/OrbitControls.js";
 import {colorArray} from "./colors.js";
 
-let camera, scene, renderer, controls, points;
+let camera, scene, renderer, controls, points, clock, delta;
 
 function init() {
     const container = document.getElementById("webgl-output");
+    clock = new THREE.Clock();
+    delta = 0;
 
     // Création de la scène
     scene = new THREE.Scene();
@@ -24,8 +26,6 @@ function init() {
 
     // Création des contrôles
     controls = new OrbitControls(camera, renderer.domElement);
-    controls.autoRotate = true;
-    controls.autoRotateSpeed = 0.05;
 
     // Création des particules
     const particlesGeometry = new THREE.BufferGeometry();
@@ -86,9 +86,12 @@ function onWindowResize() {
 }
 
 function animate() {
-    requestAnimationFrame(animate);
-    controls.update();
-    renderer.render(scene, camera);
+    renderer.setAnimationLoop(() => {
+        const delta = clock.getDelta();
+        points.rotation.z += 0.008 * delta;
+        if (controls) controls.update();
+        renderer.render(scene, camera);
+    });
 }
 
 init();

@@ -140,6 +140,7 @@ class ThreeSceneManager {
         // On configure le renderer
         this.renderer = new THREE.WebGLRenderer({antialias: true});
         this.renderer.setSize(container.clientWidth, container.clientHeight);
+        this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         container.appendChild(this.renderer.domElement);
 
