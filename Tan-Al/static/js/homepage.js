@@ -71,7 +71,7 @@ function init() {
 
     const button = document.getElementById("start");
     button.addEventListener("click", () => {
-        window.location.href = "/harmonize";
+        window.location.href = "/app";
     });
 }
 

@@ -45,11 +45,43 @@ body {
     font-size: 1em;
 }
 
+.container h1 img {
+    width: 1.2em;
+    height: 1.2em;
+    margin-right: 0.32em;
+    vertical-align: middle;
+}
+
 .container h2 {
     margin: 0.5em 0;
     width: 100%;
     color: #a9afb9;
     font-size: 0.5em;
+}
+
+.container h2 a {
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 0.2s ease-in-out;
+}
+
+a:link {
+    color: #a9afb9;
+}
+
+a:visited {
+    color: #a9afb9;
+}
+
+a:hover {
+    color: #e9c2b2;
+}
+
+a:active {
+    color: #e9c2b2;
+}
+
+a:link, a:visited {
+    text-decoration: none;
 }
 
 #start {
@@ -80,19 +112,20 @@ body {
         width: auto;
         padding: 0 5vw;
         margin: 0 auto;
-        font-size: 5.8vmin;
-    }
-
-    #start {
-        margin-top: 1.4em;
-        padding: 1rem 2rem;
+        font-size: 5.2vmin;
     }
 }
 
 @media (max-width: 512px) {
     .container {
+        top: 42%;
         width: auto;
         padding: 0 4vw;
         margin: 0 auto;
+        font-size: 6.2vmin;
+    }
+
+     #start {
+        font-size: 0.56em;
     }
 }
