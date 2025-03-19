@@ -1,3 +1,4 @@
+import time
 import cvxopt
 import cvxopt.solvers
 import numpy as np
@@ -227,6 +228,7 @@ def simplify_convex_palette(points, target_vertices=10, max_iterations=500):
     emit('convex_hull', {'type': 'initial', 'vertices': current_vertices.tolist(), 'faces': current_faces.tolist()})
 
     iteration = 0
+    t0 = time.time()
     while iteration < max_iterations and len(current_vertices) > target_vertices:
         previous_vertex_count = len(current_vertices)
 
@@ -295,4 +297,5 @@ def simplify_convex_palette(points, target_vertices=10, max_iterations=500):
                 break
 
     current_vertices = np.clip(current_vertices, 0, 1)
+    emit("server_log", {"data": f"La simplification a pris {time.time() - t0:.2f} secondes."})
     return {'vertices': current_vertices, 'faces': current_faces}

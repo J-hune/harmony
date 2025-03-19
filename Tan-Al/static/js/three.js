@@ -528,6 +528,11 @@ class ThreeSceneManager {
 
         this.clearOverlayMesh();
 
+        // On restaure les boutons de palette
+        document.getElementById("initial-palette").style.cursor = "pointer";
+        document.getElementById("selected-palette").style.cursor = "pointer";
+        this.paletteChanged = false;
+
         // Restauration de l'enveloppe simplifiée à partir des données originales
         this.convexHulls.simplified = JSON.parse(JSON.stringify(this.original.convexHulls));
 
