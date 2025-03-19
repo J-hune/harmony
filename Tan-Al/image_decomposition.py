@@ -19,72 +19,29 @@ def point_triangle_distance(P, triangle):
        - 'distance': la distance euclidienne
     """
     # triangle : (V0, V1, V2)
-    V0, V1, V2 = triangle[0], triangle[1], triangle[2]
-    E0 = V1 - V0
-    E1 = V2 - V0
+    V0, V1, V2 = triangle
+    E0, E1 = V1 - V0, V2 - V0
     D = V0 - P
 
-    a = np.dot(E0, E0)
-    b = np.dot(E0, E1)
-    c = np.dot(E1, E1)
-    d = np.dot(E0, D)
-    e = np.dot(E1, D)
+    a, b, c = np.dot(E0, E0), np.dot(E0, E1), np.dot(E1, E1)
+    d, e = np.dot(E0, D), np.dot(E1, D)
     det = a * c - b * b
 
-    s = b * e - c * d
-    t = b * d - a * e
+    s = (b * e - c * d)
+    t = (b * d - a * e)
 
+    # Cas des régions avec calcul vectorisé
     if (s + t) <= det:
-        if s < 0:
-            if t < 0:
-                # Region 4
-                if d < 0:
-                    s = np.clip(-d / a, 0, 1)
-                    t = 0
-                else:
-                    s = 0
-                    t = np.clip(-e / c, 0, 1)
-            else:
-                # Region 3
-                s = 0
-                t = np.clip(-e / c, 0, 1)
-        elif t < 0:
-            # Region 5
-            t = 0
-            s = np.clip(-d / a, 0, 1)
-        else:
-            # Region 0
-            invDet = 1.0 / det
-            s *= invDet
-            t *= invDet
+        s = np.clip(s / det, 0, 1)
+        t = np.clip(t / det, 0, 1)
     else:
-        if s < 0:
-            tmp0 = b + d
-            tmp1 = c + e
-            if tmp1 > tmp0:
-                numer = tmp1 - tmp0
-                denom = a - 2 * b + c
-                s = np.clip(numer / denom, 0, 1)
-                t = 1 - s
-            else:
-                t = np.clip(-e / c, 0, 1)
-                s = 0
-        elif t < 0:
-            tmp0 = b + e
-            tmp1 = a + d
-            if tmp1 > tmp0:
-                numer = tmp1 - tmp0
-                denom = a - 2 * b + c
-                t = np.clip(numer / denom, 0, 1)
-                s = 1 - t
-            else:
-                s = np.clip(-d / a, 0, 1)
-                t = 0
-        else:
-            numer = c + e - b - d
-            denom = a - 2 * b + c
-            s = np.clip(numer / denom, 0, 1)
+        tmp0, tmp1 = b + d, c + e
+        if tmp1 > tmp0:
+            s = np.clip((tmp1 - tmp0) / (a - 2 * b + c), 0, 1)
             t = 1 - s
+        else:
+            t = np.clip(-e / c, 0, 1)
+            s = 0
 
     u = 1 - s - t
     closest = u * V0 + s * V1 + t * V2
@@ -278,14 +235,10 @@ def build_color_map(labels):
     Returns:
         tuple: (dictionnaire couleur->indices, np.array des couleurs uniques)
     """
-    col_map = {}
-    label_tuples = [tuple(row) for row in labels]
-    uniq = np.array(list(set(label_tuples)))
-    for col in uniq:
-        col_map.setdefault(tuple(col), [])
-    for i, col in enumerate(label_tuples):
-        col_map[tuple(col)].append(i)
-    return col_map, uniq
+    uniq_labels, inverse = np.unique(labels, axis=0, return_inverse=True)
+    # Construction du dictionnaire couleur -> indices
+    col_map = {tuple(uniq_labels[i]): np.where(inverse == i)[0].tolist() for i in range(len(uniq_labels))}
+    return col_map, uniq_labels
 
 
 def assign_face_weights(uniq_labels, palette, hull_obj, delaunay_obj):
