@@ -23,6 +23,15 @@ class LayerManager {
     }
 
     /**
+     * Réinitialise le gestionnaire de couches
+     */
+    reset() {
+        this.width = 0;
+        this.height = 0;
+        this.layers = [];
+    }
+
+    /**
      * Trouve ou crée un canvas pour une couche donnée et le retourne
      * @param {Object} data - Les données de la couche
      * @param {number} data.width - La largeur de la couche

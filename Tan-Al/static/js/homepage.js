@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import {OrbitControls} from "three/examples/jsm/controls/OrbitControls.js";
+import {OrbitControls} from "three/examples/jsm/controls/OrbitControls.min.js";
 import {colorArray} from "./colors.js";
 
 let camera, scene, renderer, controls, points, clock, delta;
@@ -68,11 +68,6 @@ function init() {
 
     // Gestion du redimensionnement
     window.addEventListener("resize", onWindowResize);
-
-    const button = document.getElementById("start");
-    button.addEventListener("click", () => {
-        window.location.href = "/app";
-    });
 }
 
 function onWindowResize() {

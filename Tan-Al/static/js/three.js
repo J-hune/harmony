@@ -1,8 +1,8 @@
 import * as THREE from "three";
-import {OrbitControls} from "three/examples/jsm/controls/OrbitControls.js";
-import {LineGeometry} from "three/examples/jsm/lines/LineGeometry.js";
-import {LineMaterial} from "three/examples/jsm/lines/LineMaterial.js";
-import {Line2} from "three/examples/jsm/lines/Line2.js";
+import {OrbitControls} from "three/examples/jsm/controls/OrbitControls.min.js";
+import {LineGeometry} from "three/examples/jsm/lines/LineGeometry.min.js";
+import {LineMaterial} from "three/examples/jsm/lines/LineMaterial.min.js";
+import {Line2} from "three/examples/jsm/lines/Line2.min.js";
 import Stats from "stats";
 
 // Décalage pour centrer les coordonnées RGB
@@ -493,6 +493,8 @@ class ThreeSceneManager {
         const originalImage = document.getElementById("original-image");
         if (originalImage) {
             this.createPointCloud(originalImage);
+        } else {
+            console.error("L'image originale n'est pas disponible.");
         }
         if (this.convexHulls.initial) {
             this.createConvexHullCircles(
