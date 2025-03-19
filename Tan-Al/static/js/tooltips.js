@@ -1,4 +1,4 @@
-import {createPopper} from "popper.js"
+import {computePosition, offset, flip, autoUpdate} from 'floating-ui';
 
 class TooltipsManager {
     constructor() {
@@ -30,54 +30,57 @@ class TooltipsManager {
             tooltip.element.innerHTML = tooltip.text;
             document.body.appendChild(tooltip.element);
 
+            // Fonction de mise à jour de la position
+            const updatePosition = () => {
+                computePosition(tooltip.target, tooltip.element, {
+                    placement: tooltip.placement,
+                    middleware: [offset(8), flip()],
+                    strategy: 'fixed'
+                }).then(({x, y}) => {
+                    Object.assign(tooltip.element.style, {
+                        left: `${x}px`,
+                        top: `${y}px`
+                    });
+                });
+            };
 
-            // On crée l'instance du tooltip
-            tooltip.instance = createPopper(tooltip.target, tooltip.element, {
-                placement: tooltip.placement,
-                modifiers: [{name: "offset", options: {offset: [0, 8]}}]
-            });
-            tooltip.instance.update();
+            // On utilise autoUpdate pour recalculer la position lors des changements
+            const cleanup = autoUpdate(tooltip.target, tooltip.element, updatePosition);
 
             let showTimeout;
-            function show() {
+            const show = () => {
                 showTimeout = setTimeout(() => {
-                    // On ignore si l'élément a l'attribut disabled
+                    // Ne rien faire si la cible est désactivée ou n'est plus en hover
                     if (tooltip.target.hasAttribute('disabled')) return;
                     if (!tooltip.target.matches(':hover')) return;
 
                     tooltip.element.setAttribute('data-show', '');
+                    updatePosition();
+                }, tooltip.delay || 0);
+            };
 
-                    tooltip.instance.setOptions((options) => ({
-                        ...options,
-                        modifiers: [
-                            ...options.modifiers,
-                            {name: 'eventListeners', enabled: true},
-                        ],
-                    }));
-
-                    tooltip.instance.update();
-                }, tooltip.delay || 0); // Délai d'affichage en millisecondes (ici 1s)
-            }
-
-            function hide() {
+            const hide = () => {
                 clearTimeout(showTimeout);
                 tooltip.element.removeAttribute('data-show');
+            };
 
-                // Disable the event listeners
-                tooltip.instance.setOptions((options) => ({
-                    ...options,
-                    modifiers: [
-                        ...options.modifiers,
-                        {name: 'eventListeners', enabled: false},
-                    ],
-                }));
-            }
+            // Événements desktop et mobile
+            const showEvents = ["mouseenter", "focus", "touchstart"];
+            const hideEvents = ["pointerleave", "blur", "touchend", "touchcancel"];
 
-            const showEvents = ["mouseenter", "focus"];
-            const hideEvents = ["pointerleave", "blur"];
+            showEvents.forEach(event =>
+                tooltip.target.addEventListener(event, show)
+            );
+            hideEvents.forEach(event =>
+                tooltip.target.addEventListener(event, hide)
+            );
 
-            showEvents.forEach((event) => tooltip.target.addEventListener(event, show));
-            hideEvents.forEach((event) => tooltip.target.addEventListener(event, hide));
+            // On masque le tooltip lors d'un tap ailleurs sur mobile
+            document.addEventListener("touchstart", (e) => {
+                if (!tooltip.target.contains(e.target) && !tooltip.element.contains(e.target)) {
+                    hide();
+                }
+            });
         });
     }
 }

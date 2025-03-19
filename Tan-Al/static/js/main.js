@@ -45,6 +45,12 @@ function initSocket() {
     socket.on('connect', () => {
         console.log('Connecté au serveur via WebSocket');
         terminalManager.logMessage('Connecté au serveur via WebSocket');
+
+        // Si "initial-palette" est affiché, on reset tout, la connexion a été réinitialisée
+        if (document.getElementById('initial-palette').children.length > 0) {
+            reset();
+            terminalManager.logMessage("La connexion a été réinitialisée, veuillez re-télécharger une image.", 'important');
+        }
     });
 
     socket.on('server_response', (msg) => {
@@ -175,8 +181,10 @@ function reset() {
     document.querySelectorAll('.harmony-button').forEach(button => button.disabled = true);
     document.getElementById('harmonize').disabled = true;
 
+    terminalManager.stopThinking();
     threeSceneManager.reset();
     paletteManager.reset();
+    layerManager.reset();
 }
 
 /**

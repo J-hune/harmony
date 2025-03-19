@@ -28,9 +28,9 @@ def run_socket_server(socket_port, socket_id):
 
     # On ouvre le serveur avec un buffer de 10Mo pour éviter les erreurs de dépassement de mémoire
     if REVERSE_PROXY:
-        socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", path= str(socket_id) + "/socket.io", max_http_buffer_size= 1024 * 1024 * 5)
+        socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", path= str(socket_id) + "/socket.io", max_http_buffer_size= 1024 * 1024 * 6)
     else:
-        socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", max_http_buffer_size= 1024 * 1024 * 5)
+        socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", max_http_buffer_size= 1024 * 1024 * 6)
 
     @socketio.on('connect')
     def handle_connect():

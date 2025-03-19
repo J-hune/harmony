@@ -18,7 +18,7 @@ class TerminalManager {
             window.getComputedStyle(this.terminalContainer).height,
             10
         );
-        this.slider.style.bottom = `${containerHeight + this.terminalPadding}px`;
+        this.slider.style.bottom = `${containerHeight - 4}px`;
 
         // Ajout de l'événement 'mousedown' sur le slider pour démarrer le redimensionnement
         this.slider.addEventListener('mousedown', (event) => {
@@ -122,11 +122,11 @@ class TerminalManager {
         if (sliderBottom < 40 || sliderBottom > window.innerHeight - 40) return;
 
         // On met à jour la position du slider
-        this.slider.style.bottom = `${sliderBottom}px`;
+        this.slider.style.bottom = `${sliderBottom - 4}px`;
 
         // On met à jour la hauteur du terminal-container en tenant compte du padding
-        this.terminalContainer.style.height = `${sliderBottom - this.terminalPadding}px`;
-        document.getElementById("webgl-output").style.bottom = `${sliderBottom - this.terminalPadding}px`;
+        this.terminalContainer.style.height = `${sliderBottom}px`;
+        document.getElementById("webgl-output").style.bottom = `${sliderBottom}px`;
         this.terminal.scrollTop = this.terminal.scrollHeight
         this.threeSceneManager.onWindowResize();
     }

@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Une application d'harmonisation d'images basée sur l'algorithme de décomposition d'image de Tan et al. (2018) : importez une image, générez une palette optimisée, modifiez-la en 3D et obtenez des harmonisations (complémentaire, triadique, split, monochrome,...).">
-    <meta name="keywords" content="décomposition d'image, palette de couleurs, harmonisation d'images, transfert de couleurs, Tan 2018, traitement d'image">
+    <meta name="description" content="Une application d'harmonisation d'images basée sur l'algorithme de décomposition d'image de Tan et al. (2018) : importez une image, générez une palette optimisée et obtenez des harmonisations.">
+    <meta name="keywords" content="décomposition d'image, palette de couleurs, harmonisation d'images, Tan 2018, traitement d'image">
     <meta name="author" content="Donovann Zassot - Jhune">
 
     <link rel="apple-touch-icon" sizes="180x180" href="../static/favicons/apple-touch-icon.png">
@@ -17,12 +17,12 @@
 </head>
 <div id="webgl-output"></div>
 <div class="container">
-    <h1><img src="../static/img/wand.png" alt="🪄">Harmonisation d'images</h1>
+    <h1><img src="../static/img/wand.webp" alt="🪄">Harmonisation d'images</h1>
     <h2>Cette application est basée sur l'article de Tan, J., Echevarria, J. I., & Gingold, Y. I. (2018) <br>
         <a href="https://dl.acm.org/doi/10.1145/3272127.3275054" target="_blank" rel="noopener noreferrer">“Palette-based image decomposition, harmonization, and color transfer”</a>
     </h2>
 
-    <button id="start" aria-label="Accéder à l'application">Accéder à l'application</button>
+    <a href="/app" aria-label="Accéder à l'application">Accéder à l'application</a>
 </div>
 <body>
 
@@ -30,7 +30,7 @@
 <script type="importmap">
     {
       "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.js",
+        "three": "https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.min.js",
         "three/": "https://cdn.jsdelivr.net/npm/three@0.172.0/"
       }
     }
