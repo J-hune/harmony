@@ -67,6 +67,13 @@ function loadNewImages() {
             // Les deux images sont chargées, on les affiche
             document.getElementById('img1').src = url1;
             document.getElementById('img2').src = url2;
+
+            console.log(img2Preload.naturalWidth / img2Preload.naturalHeight)
+            if (img2Preload.naturalWidth / img2Preload.naturalHeight >= 1.5) {
+                document.getElementById('image-container').classList.add("column");
+            } else {
+                document.getElementById('image-container').classList.remove("column");
+            }
         }
     }
 
@@ -79,7 +86,7 @@ function loadNewImages() {
     img2Preload.src = url2;
 }
 
-let inEvents = ["touchstart", "mouseover"];
+let inEvents = ["mouseover"];
 inEvents.forEach(event => {
     document.getElementById('img1').addEventListener(event, function () {
         document.getElementById('img2').classList.add("dimmed");
@@ -90,7 +97,7 @@ inEvents.forEach(event => {
     });
 })
 
-let outEvents = ["touchend", "mouseout"];
+let outEvents = ["mouseout"];
 outEvents.forEach(event => {
     document.getElementById('img1').addEventListener(event, function () {
         document.getElementById('img2').classList.remove("dimmed");

@@ -13,12 +13,33 @@
     <link rel="stylesheet" href="../static/css/feedback.css">
 </head>
 <body>
-<h1>Choisissez l'image que vous préférez</h1>
-<div class="container">
-    <img draggable="false" id="img1" src="../static/img/placeholder.webp" alt="Option 1">
-    <img draggable="false" id="img2" src="../static/img/placeholder.webp" alt="Option 2">
+<div class="navbar-container">
+    <div class="navbar">
+        <div class="navbar-left">
+            <div class="logo-container">
+                <a href="/" class="logo">
+                    <img src="../static/img/logo.webp" alt="Logo">
+                </a>
+                <a href="/" class="logo-text">Harmonisation d'images</a>
+            </div>
+        </div>
+        <div class="navbar-right">
+            <a href="/app">Harmoniser une image</a>
+            <a href="/">À propos</a>
+        </div>
+        <div class="mobile-navbar-right">
+            <a href="/app">Application</a>
+            <a href="/">À propos</a>
+        </div>
+    </div>
 </div>
-
+<div class="container">
+    <h1>Choisissez l'image que vous préférez</h1>
+    <div id="image-container" class="image-container" >
+        <img draggable="false" id="img1" src="../static/img/placeholder.webp" alt="Option 1">
+        <img draggable="false" id="img2" src="../static/img/placeholder.webp" alt="Option 2">
+    </div>
+</div>
 <script type="module" src="../static/js/feedback.js" defer></script>
 </body>
 </html>
