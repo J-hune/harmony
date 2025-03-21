@@ -68,7 +68,6 @@ function loadNewImages() {
             document.getElementById('img1').src = url1;
             document.getElementById('img2').src = url2;
 
-            console.log(img2Preload.naturalWidth / img2Preload.naturalHeight)
             if (img2Preload.naturalWidth / img2Preload.naturalHeight >= 1.5) {
                 document.getElementById('image-container').classList.add("column");
             } else {

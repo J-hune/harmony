@@ -74,6 +74,8 @@ def extract_rgbxy_weights(palette_rgb, image_orig):
     # Poids ASAP en RGB via la méthode Tan 2016
     hull_rgb = img.reshape(-1, 3)[hull_combined.vertices].reshape(-1, 1, 3)
     asap_weights = compute_asap_weights_tan2016(hull_rgb, palette_rgb)
+    if asap_weights is None:
+        return
 
     # Poids RGBXY via triangulation Delaunay
     hull_pts = hull_combined.points[hull_combined.vertices]
@@ -162,6 +164,8 @@ def compute_asap_weights_tan2016(img_labels, tetra_palette):
 
     # Attribution des pixels aux faces du tétraèdre et calcul local des poids
     uniq_weights = assign_face_weights(uniq_labels, ordered_palette, hull, delaunay_test)
+    if uniq_weights is None:
+        return
 
     # Reconstruction des poids sur l'image entière
     full_weights = reconstruct_weights(labels_inside, color_map, uniq_weights, ordered_palette.shape[0])
@@ -276,7 +280,9 @@ def assign_face_weights(uniq_labels, palette, hull_obj, delaunay_obj):
                     remaining.difference_update(valid.tolist())
             except Exception:
                 continue
-    assert len(remaining) == 0, "Tous les pixels uniques n'ont pas été assignés à une face."
+    if len(remaining) > 0:
+        emit('server_response', {'error': f"Erreur : {len(remaining)} pixels n'ont pas pu être assignés", 'reset': True})
+        return
 
     uniq_weights = np.zeros((len(uniq_labels), n_vertices))
     for face, indices in face_pixel_map.items():

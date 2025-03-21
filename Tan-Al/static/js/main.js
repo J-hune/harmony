@@ -281,7 +281,7 @@ function initWebFeatures() {
         onImageUpload(file);
     });
 
-    document.body.addEventListener('click', (e) => {
+    document.getElementById("previews-container").addEventListener('click', (e) => {
         // Si on clique sur une image, on propose de la télécharger (en full size)
         if (e.target.tagName === 'IMG') {
             const a = document.createElement('a');

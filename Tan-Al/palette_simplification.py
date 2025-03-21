@@ -268,8 +268,8 @@ def simplify_convex_palette(points, target_vertices=10, max_iterations=500):
                 candidate_collapses.append((added_volume, edge, new_vertex))
 
         if not candidate_collapses:
-            emit('server_log', {'error': f"Aucune fusion possible à l'itération {iteration}"})
-            break
+            emit('server_response', {'error': f"Aucune fusion possible à l'itération {iteration}", 'reset': True})
+            return None
 
         # On sélectionne la fusion qui minimise le volume ajouté.
         best_candidate = min(candidate_collapses, key=lambda x: x[0])
