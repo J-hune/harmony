@@ -57,6 +57,7 @@ function initSocket() {
         if (msg.error) {
             console.error('Erreur reçue du serveur :', msg.error);
             terminalManager.logMessage('Erreur reçue du serveur : ' + msg.error, 'error');
+            if (msg.reset === true) reset();
         } else {
             console.log('Message du serveur :', msg.data);
         }

@@ -1,3 +1,4 @@
+import json
 import multiprocessing
 import base64
 import sys
@@ -28,9 +29,9 @@ def run_socket_server(socket_port, socket_id):
 
     # On ouvre le serveur avec un buffer de 10Mo pour éviter les erreurs de dépassement de mémoire
     if REVERSE_PROXY:
-        socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", path= str(socket_id) + "/socket.io", max_http_buffer_size= 1024 * 1024 * 6)
+        socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", path=str(socket_id) + "/socket.io", max_http_buffer_size=1024 * 1024 * 6)
     else:
-        socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", max_http_buffer_size= 1024 * 1024 * 6)
+        socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", max_http_buffer_size=1024 * 1024 * 6)
 
     @socketio.on('connect')
     def handle_connect():
@@ -70,8 +71,16 @@ def run_socket_server(socket_port, socket_id):
         # Conversion en tableau numpy puis décodage avec OpenCV
         nparr = np.frombuffer(img_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
         if img is None:
-            emit('error', {'message': "Données image invalides"})
+            emit('server_response', {'error': "Données image invalides", 'reset': True})
+            return
+
+        # On vérifie que l'image n'est pas en noir et blanc
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        gray_3ch = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+        if np.array_equal(img, gray_3ch):
+            emit('server_response', {'error': "L'image doit être en couleur", 'reset': True})
             return
 
         # Traitement : conversion en RGB et extraction des pixels normalisés
@@ -95,7 +104,6 @@ def run_socket_server(socket_port, socket_id):
         # On décompose l'image en couches pondérées selon la palette de couleurs
         extract_rgbxy_weights(vertices, pixels)
         emit('thinking', {'thinking': False})
-
 
     @socketio.on("harmonize")
     def handle_harmonize(data):
@@ -125,6 +133,7 @@ socket_number = int(sys.argv[2]) if len(sys.argv) > 2 else 2
 socket_ports = [load_balancer_port + i for i in range(1, socket_number + 1)]
 lb_counter = 0  # compteur pour le round-robin
 
+
 def get_next_socket_id():
     global lb_counter
     socket_port = socket_ports[lb_counter % len(socket_ports)]
@@ -132,9 +141,11 @@ def get_next_socket_id():
     lb_counter += 1
     return [socket_id, socket_port]
 
+
 def run_web_server():
     app = Flask(__name__)
     app.config['SECRET_KEY'] = 'secret!'
+    img_ids = json.load(open('./ids.json'))
 
     if not DEBUG:
         log = logging.getLogger('werkzeug')
@@ -147,6 +158,33 @@ def run_web_server():
     @app.route('/app')
     def harmonize():
         return render_template('app.html')
+
+    @app.route('/feedback')
+    def form():
+        return render_template('feedback.html')
+
+    @app.route('/img_ids')
+    def get_img_ids():
+        return jsonify(img_ids)
+
+    @app.route('/form/feedback', methods=['POST'])
+    def form_feedback():
+        # L'utilisateur nous donne un feedback qui contient l'id de l'image, les deux harmonies présentées et le choix de l'utilisateur
+        # On l'enregistre dans un fichier csv
+        data = request.get_json()
+        img_id = data.get('id')
+        harmony1 = data.get('harmonyOption1')
+        harmony2 = data.get('harmonyOption2')
+        choice = data.get('harmonyChosen')
+
+        # On vérifie que toutes les données sont présentes
+        if not img_id or not harmony1 or not harmony2 or not choice:
+            return jsonify({'success': False, 'message': 'Données manquantes'}), 400
+
+        # On enregistre les données dans un fichier CSV
+        with open('feedback.csv', 'a') as f:
+            f.write(f"{img_id},{harmony1},{harmony2},{choice}\n")
+        return jsonify({'success': True}), 200
 
     @app.errorhandler(404)
     def page_not_found(e):
