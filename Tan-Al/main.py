@@ -92,6 +92,9 @@ def run_socket_server(socket_port, socket_id):
 
         # Calcul de la palette simplifiée
         palette = simplify_convex_palette(pixels, 6)
+        if palette is None:
+            return
+
         vertices = palette['vertices']
         faces = palette['faces']
         emit('convex_hull', {'type': 'simplified', 'vertices': vertices.tolist(), 'faces': faces.tolist()})

@@ -46,6 +46,76 @@
     background: #c270c2;
 }
 
+
+/* ===============================
+   Navbar
+=============================== */
+.navbar-container {
+    position: fixed;
+    top: 0;
+    width: 100%;
+    z-index: 10001;
+}
+
+.navbar-container .navbar {
+    position: relative;
+    width: 100%;
+    height: 62px;
+    background-color: #262a31;
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: default;
+    box-shadow: rgba(23, 26, 33, 0.7) 0 2px 10px;
+}
+
+.navbar-container .navbar a {
+    color: var(--light-color);
+    text-decoration: none;
+    font-size: 1.1rem;
+    font-weight: 500;
+    transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.navbar-container .navbar-right a:hover {
+    color: var(--primary-color);
+}
+
+.mobile-navbar-right {
+    display: none;
+}
+
+.navbar-right a, .mobile-navbar-right a {
+    padding: 22px 12px;
+}
+
+.navbar-container .navbar .navbar-left {
+    display: flex;
+    align-items: center;
+}
+
+.navbar-container .logo-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.navbar-container .logo-container .logo {
+    display: flex;
+}
+
+.navbar-container .logo-container img {
+    width: 36px;
+    margin-right: 12px;
+}
+
+.navbar-container .logo-text {
+    height: 36px;
+    align-content: center;
+    color: var(--text-color);
+}
+
 html, body {
     height: 100vh;
     width: 100vw;
@@ -73,9 +143,10 @@ body {
 }
 
 .container {
+    padding-top: 62px;
     display: grid;
     grid-template-columns: 600px auto 90px;
-    grid-template-rows: 100vh;
+    grid-template-rows: calc(100vh - 62px);
     background-color: var(--main-background-color);
     overflow: hidden;
 }
@@ -83,7 +154,7 @@ body {
 .settings,
 .content,
 .harmonize {
-    height: 100vh;
+    height: calc(100vh - 62px);
     overflow: auto;
 }
 
@@ -105,7 +176,7 @@ body {
 
 .content {
     position: relative;
-    height: 100vh;
+    height: calc(100vh - 62px);
     overflow: hidden;
     background-color: var(--three-background-color);
 }
@@ -538,5 +609,23 @@ body {
 
     .harmonize {
         gap: 12px;
+    }
+
+    .navbar-container .navbar a {
+        font-size: 1rem;
+    }
+
+    .navbar .logo-text {
+        display: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .mobile-navbar-right {
+        display: flex;
+    }
+
+    .navbar-right {
+        display: none;
     }
 }

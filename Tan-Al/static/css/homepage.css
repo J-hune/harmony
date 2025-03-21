@@ -21,8 +21,13 @@
     --main-background-color: #191a1e;
 }
 
+::-webkit-scrollbar {
+    display: none;  /* Safari and Chrome */
+}
+
 html, body {
     height: 100vh;
+    scrollbar-width: none;
 }
 
 *, *::before, *::after {
@@ -110,6 +115,7 @@ h2 a:link, a:visited, p a:link, p a:visited {
 }
 
 .container > a {
+    display: inline-block;
     background-image: radial-gradient(66.11% 66.11% at 50% 33.89%, hsla(0, 0%, 100%, .4) 0, hsla(0, 0%, 100%, 0) 100%),
     linear-gradient(278.88deg, #fff, #66e3ff 28.83%, #a787ff 56.31%, #ffc875 86.49%);
     padding: 0.7rem 1.2rem;
@@ -132,6 +138,33 @@ h2 a:link, a:visited, p a:link, p a:visited {
     linear-gradient(278.88deg, #fff, #66e3ff 28.83%, #a787ff 56.31%, #ffc875 86.49%);
 }
 
+.footer {
+    color: #1d253b;
+    font-size: 1em;
+    font-weight: bold;
+    position: absolute;
+    top: 100%;
+    width: 100%;
+    text-align: center;
+    padding: 18px;
+}
+
+.footer a {
+    text-decoration: none;
+    background-image: radial-gradient(66.11% 66.11% at 50% 33.89%, hsla(340, 100%, 50%, .4) 0, hsla(340, 100%, 50%, 0) 100%),
+    linear-gradient(278.88deg, #cc3b4a 0%, #cc007e 28.83%, #5c2e99 56.31%, #d760ff 86.49%);
+    color: transparent;
+    background-clip: text;
+    transition-duration: .2s;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.footer a:hover {
+    background-image: radial-gradient(66.11% 66.11% at 50% 33.89%, hsla(340, 100%, 50%, .1) 0, hsla(340, 100%, 50%, 0) 100%),
+    linear-gradient(278.88deg, #ff4b5c 0%, #ff009c 28.83%, #9b4dff 56.31%, #d760ff 86.49%);
+}
+
+
 @media (max-width: 1024px) {
     .container {
         top: 46%;
@@ -153,5 +186,10 @@ h2 a:link, a:visited, p a:link, p a:visited {
 
      .container > a {
         font-size: 0.56em;
+    }
+
+    .footer {
+        font-size: 0.8em;
+        padding: 14px;
     }
 }
