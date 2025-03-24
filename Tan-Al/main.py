@@ -2,6 +2,9 @@ import json
 import multiprocessing
 import base64
 import sys
+import datetime
+import uuid
+from flask import session
 
 import cv2
 import logging
@@ -184,9 +187,17 @@ def run_web_server():
         if not img_id or not harmony1 or not harmony2 or not choice:
             return jsonify({'success': False, 'message': 'Données manquantes'}), 400
 
-        # On enregistre les données dans un fichier CSV
+        # On attribue un ID utilisateur unique si ce n'est pas déjà fait
+        if 'user_id' not in session:
+            session['user_id'] = str(uuid.uuid4())
+
+        user_id = session['user_id']
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # On enregistre dans le fichier CSV avec l'ID utilisateur
         with open('feedback.csv', 'a') as f:
-            f.write(f"{img_id},{harmony1},{harmony2},{choice}\n")
+            f.write(f"{timestamp},{user_id},{img_id},{harmony1},{harmony2},{choice}\n")
+
         return jsonify({'success': True}), 200
 
     @app.errorhandler(404)
