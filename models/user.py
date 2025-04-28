@@ -10,7 +10,7 @@ class User(db.Model):
     is_active = db.Column(db.Boolean, default=True)
 
     def __repr__(self):
-        return f'<User {self.username}>'
+        return {"id": self.id, "email": self.email, "username": self.username}
 
     def set_password(self, password):
         self.password = generate_password_hash(password)
