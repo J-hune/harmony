@@ -96,3 +96,15 @@ def login():
 @token_required
 def profile(user):
     return jsonify({'id': user.id, 'email': user.email, 'username': user.username}), 200
+
+@user_routes.route('/delete_user', methods=['DELETE'])
+@token_required
+def delete_user(user):
+    try:
+        # Delete the user from the database
+        db.session.delete(user)
+        db.session.commit()
+        return jsonify({'message': 'Utilisateur supprimé avec succès'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e), 'error_code': 'DATABASE_ERROR'}), 500
