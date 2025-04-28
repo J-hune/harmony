@@ -13,6 +13,7 @@ from extensions import db
 
 from routes.feedback_routes import feedback_routes
 from routes.user_routes import user_routes
+from routes.image_routes import image_routes
 
 from image_decomposition import extract_rgbxy_weights
 from palette_simplification import simplify_convex_palette
@@ -157,6 +158,8 @@ def run_web_server():
     # On initialise la base de données
     db.init_app(app)
     from models.user import User
+    from models.harmonized_image import HarmonizedImage
+    from models.image_vote import ImageVote
     with app.app_context():
         db.create_all()
 
@@ -167,6 +170,7 @@ def run_web_server():
     # On enregistre les blueprints pour les routes
     app.register_blueprint(user_routes)
     app.register_blueprint(feedback_routes)
+    app.register_blueprint(image_routes)
 
     @app.route('/')
     def index():

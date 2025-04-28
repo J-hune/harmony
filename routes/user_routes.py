@@ -101,7 +101,7 @@ def profile(user):
 @token_required
 def delete_user(user):
     try:
-        # Delete the user from the database
+        # Suppression de l'utilisateur de la base de données
         db.session.delete(user)
         db.session.commit()
         return jsonify({'message': 'Utilisateur supprimé avec succès'}), 200
