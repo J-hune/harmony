@@ -1,16 +1,18 @@
-import json
 import multiprocessing
 import base64
 import sys
-import datetime
-import uuid
-from flask import session
-
 import cv2
 import logging
 import numpy as np
-from flask import Flask, render_template, request, jsonify
+
+from flask import Flask, render_template, request, jsonify, session
 from flask_socketio import SocketIO, emit
+
+from config import Config
+from extensions import db
+
+from routes.feedback_routes import feedback_routes
+from routes.user_routes import user_routes
 
 from image_decomposition import extract_rgbxy_weights
 from palette_simplification import simplify_convex_palette
@@ -150,12 +152,21 @@ def get_next_socket_id():
 
 def run_web_server():
     app = Flask(__name__)
-    app.config['SECRET_KEY'] = 'secret!'
-    img_ids = json.load(open('./ids.json'))
+    app.config.from_object(Config)
+
+    # On initialise la base de données
+    db.init_app(app)
+    from models.user import User
+    with app.app_context():
+        db.create_all()
 
     if not DEBUG:
         log = logging.getLogger('werkzeug')
         log.setLevel(logging.ERROR)
+
+    # On enregistre les blueprints pour les routes
+    app.register_blueprint(user_routes)
+    app.register_blueprint(feedback_routes)
 
     @app.route('/')
     def index():
@@ -164,41 +175,6 @@ def run_web_server():
     @app.route('/app')
     def harmonize():
         return render_template('app.html')
-
-    @app.route('/feedback')
-    def form():
-        return render_template('feedback.html')
-
-    @app.route('/img_ids')
-    def get_img_ids():
-        return jsonify(img_ids)
-
-    @app.route('/form/feedback', methods=['POST'])
-    def form_feedback():
-        # L'utilisateur nous donne un feedback qui contient l'id de l'image, les deux harmonies présentées et le choix de l'utilisateur
-        # On l'enregistre dans un fichier csv
-        data = request.get_json()
-        img_id = data.get('id')
-        harmony1 = data.get('harmonyOption1')
-        harmony2 = data.get('harmonyOption2')
-        choice = data.get('harmonyChosen')
-
-        # On vérifie que toutes les données sont présentes
-        if not img_id or not harmony1 or not harmony2 or not choice:
-            return jsonify({'success': False, 'message': 'Données manquantes'}), 400
-
-        # On attribue un ID utilisateur unique si ce n'est pas déjà fait
-        if 'user_id' not in session:
-            session['user_id'] = str(uuid.uuid4())
-
-        user_id = session['user_id']
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        # On enregistre dans le fichier CSV avec l'ID utilisateur
-        with open('feedback.csv', 'a') as f:
-            f.write(f"{timestamp},{user_id},{img_id},{harmony1},{harmony2},{choice}\n")
-
-        return jsonify({'success': True}), 200
 
     @app.errorhandler(404)
     def page_not_found(e):
