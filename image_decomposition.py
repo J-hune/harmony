@@ -1,7 +1,5 @@
 import time
 import numpy as np
-import scipy
-from flask_socketio import emit
 from numpy import median
 from scipy.spatial import ConvexHull, Delaunay
 from scipy import sparse
@@ -51,7 +49,7 @@ def point_triangle_distance(P, triangle):
     return {'parameter': [u, s, t], 'closest': closest, 'sqrDistance': sqrDistance, 'distance': distance}
 
 
-def extract_rgbxy_weights(palette_rgb, image_orig):
+def extract_rgbxy_weights(message_queue, palette_rgb, image_orig):
     """
     Extrait les poids de mélange RGBXY à partir d'une image.
 
@@ -73,14 +71,14 @@ def extract_rgbxy_weights(palette_rgb, image_orig):
 
     # Poids ASAP en RGB via la méthode Tan 2016
     hull_rgb = img.reshape(-1, 3)[hull_combined.vertices].reshape(-1, 1, 3)
-    asap_weights = compute_asap_weights_tan2016(hull_rgb, palette_rgb)
+    asap_weights = compute_asap_weights_tan2016(message_queue, hull_rgb, palette_rgb)
     if asap_weights is None:
         return
 
     # Poids RGBXY via triangulation Delaunay
     hull_pts = hull_combined.points[hull_combined.vertices]
     delaunay_weights = compute_delaunay_barycentric_weights(hull_pts, hull_combined.points, option=3)
-    emit("server_log", {"data": f"Le calcul des poids a pris {time.time() - t0:.2f} secondes"})
+    message_queue.put_nowait(("server_log", {"data": f"Le calcul des poids a pris {time.time() - t0:.2f} secondes"}))
 
     # Combinaison des poids et reconstruction de l'image
     mix_weights = delaunay_weights.dot(asap_weights.reshape(-1, n_colors))
@@ -89,16 +87,16 @@ def extract_rgbxy_weights(palette_rgb, image_orig):
     recon_img = (mix_weights[..., None] * palette_rgb.reshape((1, 1, -1, 3))).sum(axis=2)
     err = recon_img * 255 - image_orig * 255
     rmse = np.sqrt(np.square(err.reshape(-1, 3)).sum(axis=-1).mean())
-    emit("server_log", {"data": f"RMSE de reconstruction : {rmse:.2f}"})
+    message_queue.put_nowait(("server_log", {"data": f"RMSE de reconstruction : {rmse:.2f}"}))
 
     # Envoi des poids par couche via socket
     for layer in range(mix_weights.shape[-1]):
-        emit("layer_weights", {
+        message_queue.put_nowait(("layer_weights", {
             "id": layer,
             "width": width,
             "height": height,
             "weights": mix_weights[:, :, layer].flatten().tolist()
-        })
+        }))
 
 
 def compute_delaunay_barycentric_weights(hull_points, query_points, option=3):
@@ -133,7 +131,7 @@ def compute_delaunay_barycentric_weights(hull_points, query_points, option=3):
     return weights
 
 
-def compute_asap_weights_tan2016(img_labels, tetra_palette):
+def compute_asap_weights_tan2016(message_queue, img_labels, tetra_palette):
     """
     Calcule les poids ASAP via triangulation et coordonnées barycentriques (méthode Tan 2016).
 
@@ -163,7 +161,7 @@ def compute_asap_weights_tan2016(img_labels, tetra_palette):
     color_map, uniq_labels = build_color_map(labels_inside)
 
     # Attribution des pixels aux faces du tétraèdre et calcul local des poids
-    uniq_weights = assign_face_weights(uniq_labels, ordered_palette, hull, delaunay_test)
+    uniq_weights = assign_face_weights(message_queue, uniq_labels, ordered_palette, hull, delaunay_test)
     if uniq_weights is None:
         return
 
@@ -181,9 +179,9 @@ def compute_asap_weights_tan2016(img_labels, tetra_palette):
     diff_val = np.sqrt(np.square(diff.reshape(-1, 3)).sum(axis=-1))
     rmse = np.sqrt(np.square(diff.reshape(-1, 3)).sum() / diff.reshape(-1, 3).shape[0])
 
-    emit('server_log', {'data': f"Erreur maximale : {diff_val.max():.2f} (distance euclidienne)"})
-    emit('server_log', {'data': f"Erreur médiane : {median(diff_val):.2f} (distance euclidienne)"})
-    emit('server_log', {'data': f"RMSE : {rmse:.2f}"})
+    message_queue.put_nowait(("server_log", {'data': f"Erreur maximale : {diff_val.max():.2f} (distance euclidienne)"}))
+    message_queue.put_nowait(("server_log", {'data': f"Erreur médiane : {median(diff_val):.2f} (distance euclidienne)"}))
+    message_queue.put_nowait(("server_log", {'data': f"RMSE : {rmse:.2f}"}))
 
     return reordered_weights
 
@@ -245,7 +243,7 @@ def build_color_map(labels):
     return col_map, uniq_labels
 
 
-def assign_face_weights(uniq_labels, palette, hull_obj, delaunay_obj):
+def assign_face_weights(message_queue, uniq_labels, palette, hull_obj, delaunay_obj):
     """
     Associe les pixels uniques aux faces du tétraèdre et calcule leurs poids barycentriques.
 
@@ -281,8 +279,8 @@ def assign_face_weights(uniq_labels, palette, hull_obj, delaunay_obj):
             except Exception:
                 continue
     if len(remaining) > 0:
-        emit('server_response', {'error': f"Erreur : {len(remaining)} pixels n'ont pas pu être assignés", 'reset': True})
-        return
+        message_queue.put_nowait(("server_response", {'error': f"Erreur : {len(remaining)} pixels n'ont pas pu être assignés", 'reset': True}))
+        return None
 
     uniq_weights = np.zeros((len(uniq_labels), n_vertices))
     for face, indices in face_pixel_map.items():

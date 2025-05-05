@@ -1,0 +1,4 @@
+# Socket server package
+from socket_server.server import create_app
+
+__all__ = ['create_app']
