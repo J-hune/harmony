@@ -294,10 +294,11 @@ def harmonize_palette(palette, plot=False):
     }
 
     # On normalise la palette [255,255,255] → [1,1,1]
-    palette_float = [[r / 255, g / 255, b / 255] for r, g, b in palette]
+    if any(max(rgb) > 1.0 for rgb in palette):
+        palette = [[r / 255, g / 255, b / 255] for r, g, b in palette]
 
     # On convertit la palette d'entrée de RGB vers LCh.
-    lch_palette = [rgb_to_lch(col) for col in palette_float]
+    lch_palette = [rgb_to_lch(col) for col in palette]
 
     # On plot la palette d'entrée
     if plot:
