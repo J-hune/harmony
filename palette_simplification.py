@@ -2,8 +2,14 @@ import time
 import cvxopt
 import cvxopt.solvers
 import numpy as np
-from flask_socketio import emit
 from scipy.spatial import ConvexHull, Delaunay, cKDTree
+
+try:
+    from flask_socketio import emit
+except Exception:
+    def emit(*args, **kwargs):
+        del args, kwargs
+        return None
 
 
 def _emit(emitter, event, payload):
@@ -275,7 +281,7 @@ def simplify_convex_palette(points, target_vertices=10, max_iterations=500, emit
                 candidate_collapses.append((added_volume, edge, new_vertex))
 
         if not candidate_collapses:
-            _emit(emitter, 'server_response', {'error': f"Aucune fusion possible à l'itération {iteration}", 'reset': True})
+            _emit(emitter, 'server_response', {'error': f"La simplification s'est arrêtée: aucune fusion valide trouvée à l'itération {iteration}.", 'reset': True})
             return None
 
         # On sélectionne la fusion qui minimise le volume ajouté.
@@ -290,7 +296,7 @@ def simplify_convex_palette(points, target_vertices=10, max_iterations=500, emit
 
         iteration += 1
         if iteration % 10 == 0:
-            _emit(emitter, 'server_log', {'data': f"Iteration {iteration}: {len(current_vertices)} sommets"})
+            _emit(emitter, 'server_log', {'data': f"Simplification palette: itération {iteration}, {len(current_vertices)} sommets restants."})
 
         # On vérifie si le nombre de sommets n'évolue plus ou atteint un minimum (ex. 4 sommets).
         if len(current_vertices) == previous_vertex_count or len(current_vertices) == 4:
@@ -304,5 +310,5 @@ def simplify_convex_palette(points, target_vertices=10, max_iterations=500, emit
                 break
 
     current_vertices = np.clip(current_vertices, 0, 1)
-    _emit(emitter, "server_log", {"data": f"La simplification a pris {time.time() - t0:.2f} secondes."})
+    _emit(emitter, "server_log", {"data": f"Simplification palette terminée en {time.time() - t0:.2f} s."})
     return {'vertices': current_vertices, 'faces': current_faces}
