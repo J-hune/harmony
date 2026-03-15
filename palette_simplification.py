@@ -5,6 +5,13 @@ import numpy as np
 from flask_socketio import emit
 from scipy.spatial import ConvexHull, Delaunay, cKDTree
 
+
+def _emit(emitter, event, payload):
+    if emitter is not None:
+        emitter(event, payload)
+    else:
+        emit(event, payload)
+
 def compute_rmse(points, hull_points):
     """
     Calcule l'erreur quadratique moyenne (RMSE) entre un nuage de points
@@ -214,7 +221,7 @@ def compute_edge_collapse_candidate(edge, vertices, faces, vertex_face_dict, fac
     return None
 
 
-def simplify_convex_palette(points, target_vertices=10, max_iterations=500):
+def simplify_convex_palette(points, target_vertices=10, max_iterations=500, emitter=None):
     """
     Simplifie l'enveloppe convexe issue d'un nuage de points en fusionnant itérativement des arêtes
     dont la fusion (via un LP) ajoute le moins de volume.
@@ -225,7 +232,7 @@ def simplify_convex_palette(points, target_vertices=10, max_iterations=500):
     current_faces = np.array(convert_convex_hull_faces(initial_hull))
 
     # On émet l'enveloppe convexe initiale via SocketIO pour visualisation.
-    emit('convex_hull', {'type': 'initial', 'vertices': current_vertices.tolist(), 'faces': current_faces.tolist()})
+    _emit(emitter, 'convex_hull', {'type': 'initial', 'vertices': current_vertices.tolist(), 'faces': current_faces.tolist()})
 
     iteration = 0
     t0 = time.time()
@@ -268,7 +275,7 @@ def simplify_convex_palette(points, target_vertices=10, max_iterations=500):
                 candidate_collapses.append((added_volume, edge, new_vertex))
 
         if not candidate_collapses:
-            emit('server_response', {'error': f"Aucune fusion possible à l'itération {iteration}", 'reset': True})
+            _emit(emitter, 'server_response', {'error': f"Aucune fusion possible à l'itération {iteration}", 'reset': True})
             return None
 
         # On sélectionne la fusion qui minimise le volume ajouté.
@@ -283,7 +290,7 @@ def simplify_convex_palette(points, target_vertices=10, max_iterations=500):
 
         iteration += 1
         if iteration % 10 == 0:
-            emit('server_log', {'data': f"Iteration {iteration}: {len(current_vertices)} sommets"})
+            _emit(emitter, 'server_log', {'data': f"Iteration {iteration}: {len(current_vertices)} sommets"})
 
         # On vérifie si le nombre de sommets n'évolue plus ou atteint un minimum (ex. 4 sommets).
         if len(current_vertices) == previous_vertex_count or len(current_vertices) == 4:
@@ -297,5 +304,5 @@ def simplify_convex_palette(points, target_vertices=10, max_iterations=500):
                 break
 
     current_vertices = np.clip(current_vertices, 0, 1)
-    emit("server_log", {"data": f"La simplification a pris {time.time() - t0:.2f} secondes."})
+    _emit(emitter, "server_log", {"data": f"La simplification a pris {time.time() - t0:.2f} secondes."})
     return {'vertices': current_vertices, 'faces': current_faces}
