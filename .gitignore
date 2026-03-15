@@ -1,0 +1,9 @@
+.idea/
+.venv/
+.venv-1/
+__pycache__/
+*.pyc
+.env
+feedback.csv
+README.server.local.md
+/static/uploads/
