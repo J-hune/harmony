@@ -4,6 +4,8 @@
 __pycache__/
 *.pyc
 .env
+.env.production
+.env.prod
 feedback.csv
 README.server.local.md
 /static/uploads/
