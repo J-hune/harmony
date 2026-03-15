@@ -42,15 +42,64 @@ await fetch('/get_socket_id')
  * Initialise la connexion Socket.IO et définit les gestionnaires d'événements.
  */
 function initSocket() {
+    let hasConnectedOnce = false;
+    let isThinking = false;
+    let lastHeartbeatAt = Date.now();
+    let heartbeatTimer = null;
+
+    const nowTag = () => new Date().toLocaleTimeString('fr-FR', {hour12: false});
+    const transportName = () => socket?.io?.engine?.transport?.name || 'unknown';
+
+    const stopClientHeartbeat = () => {
+        if (heartbeatTimer !== null) {
+            clearInterval(heartbeatTimer);
+            heartbeatTimer = null;
+        }
+    };
+
+    const startClientHeartbeat = () => {
+        stopClientHeartbeat();
+        heartbeatTimer = setInterval(() => {
+            const elapsedSec = Math.floor((Date.now() - lastHeartbeatAt) / 1000);
+            const phase = isThinking ? 'calcul en cours' : 'connexion idle';
+            console.info(`%c[${nowTag()}] heartbeat client%c ${phase} | transport=${transportName()} | +${elapsedSec}s`,
+                'color:#0ea5e9;font-weight:700;',
+                'color:#94a3b8;');
+        }, 15000);
+    };
+
     socket.on('connect', () => {
         console.log('Connecté au serveur via WebSocket');
-        terminalManager.logMessage('Connecté au serveur via WebSocket');
+        terminalManager.logMessage(`[${nowTag()}] Connexion WebSocket etablie (transport=${transportName()})`, 'important');
+        lastHeartbeatAt = Date.now();
+        startClientHeartbeat();
 
-        // Si "initial-palette" est affiché, on reset tout, la connexion a été réinitialisée
-        if (document.getElementById('initial-palette').children.length > 0) {
-            reset();
-            terminalManager.logMessage("La connexion a été réinitialisée, veuillez re-télécharger une image.", 'important');
+        if (hasConnectedOnce) {
+            terminalManager.logMessage(`[${nowTag()}] Connexion retablie. Le traitement serveur continue si la tache est encore active.`, 'important');
         }
+
+        hasConnectedOnce = true;
+    });
+
+    socket.on('disconnect', (reason) => {
+        stopClientHeartbeat();
+        terminalManager.logMessage(`[${nowTag()}] Connexion perdue: ${reason}`, 'important');
+    });
+
+    socket.io.on('reconnect_attempt', (attempt) => {
+        terminalManager.logMessage(`[${nowTag()}] Reconnexion en cours (tentative #${attempt})...`, 'important');
+    });
+
+    socket.io.on('reconnect', (attempt) => {
+        terminalManager.logMessage(`[${nowTag()}] Reconnexion reussie apres ${attempt} tentative(s).`, 'important');
+    });
+
+    socket.io.on('reconnect_error', (error) => {
+        terminalManager.logMessage(`[${nowTag()}] Echec de reconnexion: ${error?.message || error}`, 'error');
+    });
+
+    socket.io.on('error', (error) => {
+        terminalManager.logMessage(`[${nowTag()}] Erreur transport Socket.IO: ${error?.message || error}`, 'error');
     });
 
     socket.on('server_response', (msg) => {
@@ -64,7 +113,9 @@ function initSocket() {
     });
 
     socket.on('thinking', (data) => {
-        if (data.thinking) terminalManager.startThinking();
+        isThinking = Boolean(data?.thinking);
+        lastHeartbeatAt = Date.now();
+        if (isThinking) terminalManager.startThinking();
         else terminalManager.stopThinking();
     });
 
@@ -72,7 +123,8 @@ function initSocket() {
         if (msg.error) {
             terminalManager.logMessage('Erreur reçue du serveur : ' + msg.error, 'error');
         } else {
-            terminalManager.logMessage('Log du serveur : ' + msg.data);
+            lastHeartbeatAt = Date.now();
+            terminalManager.logMessage(`[${nowTag()}] ${msg.data}`);
         }
     });
 
