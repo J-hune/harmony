@@ -1,10 +1,16 @@
 import time
 import numpy as np
 import scipy
-from flask_socketio import emit
 from numpy import median
 from scipy.spatial import ConvexHull, Delaunay
 from scipy import sparse
+
+try:
+    from flask_socketio import emit
+except Exception:
+    def emit(*args, **kwargs):
+        del args, kwargs
+        return None
 
 
 def _emit(emitter, event, payload):
@@ -87,7 +93,7 @@ def extract_rgbxy_weights(palette_rgb, image_orig, emitter=None):
     # Poids RGBXY via triangulation Delaunay
     hull_pts = hull_combined.points[hull_combined.vertices]
     delaunay_weights = compute_delaunay_barycentric_weights(hull_pts, hull_combined.points, option=3)
-    _emit(emitter, "server_log", {"data": f"Le calcul des poids a pris {time.time() - t0:.2f} secondes"})
+    _emit(emitter, "server_log", {"data": f"Calcul des poids RGBXY terminé en {time.time() - t0:.2f} s."})
 
     # Combinaison des poids et reconstruction de l'image
     mix_weights = delaunay_weights.dot(asap_weights.reshape(-1, n_colors))
@@ -96,7 +102,7 @@ def extract_rgbxy_weights(palette_rgb, image_orig, emitter=None):
     recon_img = (mix_weights[..., None] * palette_rgb.reshape((1, 1, -1, 3))).sum(axis=2)
     err = recon_img * 255 - image_orig * 255
     rmse = np.sqrt(np.square(err.reshape(-1, 3)).sum(axis=-1).mean())
-    _emit(emitter, "server_log", {"data": f"RMSE de reconstruction : {rmse:.2f}"})
+    _emit(emitter, "server_log", {"data": f"Qualité de reconstruction: RMSE = {rmse:.2f}."})
 
     # Envoi des poids par couche via socket
     for layer in range(mix_weights.shape[-1]):
@@ -188,9 +194,9 @@ def compute_asap_weights_tan2016(img_labels, tetra_palette, emitter=None):
     diff_val = np.sqrt(np.square(diff.reshape(-1, 3)).sum(axis=-1))
     rmse = np.sqrt(np.square(diff.reshape(-1, 3)).sum() / diff.reshape(-1, 3).shape[0])
 
-    _emit(emitter, 'server_log', {'data': f"Erreur maximale : {diff_val.max():.2f} (distance euclidienne)"})
-    _emit(emitter, 'server_log', {'data': f"Erreur médiane : {median(diff_val):.2f} (distance euclidienne)"})
-    _emit(emitter, 'server_log', {'data': f"RMSE : {rmse:.2f}"})
+    _emit(emitter, 'server_log', {'data': f"Diagnostic reconstruction: erreur max = {diff_val.max():.2f} (distance euclidienne)."})
+    _emit(emitter, 'server_log', {'data': f"Diagnostic reconstruction: erreur médiane = {median(diff_val):.2f} (distance euclidienne)."})
+    _emit(emitter, 'server_log', {'data': f"Diagnostic reconstruction: RMSE = {rmse:.2f}."})
 
     return reordered_weights
 
@@ -288,7 +294,7 @@ def assign_face_weights(uniq_labels, palette, hull_obj, delaunay_obj, emitter=No
             except Exception:
                 continue
     if len(remaining) > 0:
-        _emit(emitter, 'server_response', {'error': f"Erreur : {len(remaining)} pixels n'ont pas pu être assignés", 'reset': True})
+        _emit(emitter, 'server_response', {'error': f"Échec de décomposition: {len(remaining)} pixels n'ont pas pu être assignés à un tétraèdre valide.", 'reset': True})
         return
 
     uniq_weights = np.zeros((len(uniq_labels), n_vertices))
