@@ -35,7 +35,6 @@ Les principales variables disponibles dans `.env` sont:
 - `HOST`: host d'ecoute Flask/Socket.IO (`127.0.0.1` en local, `0.0.0.0` en container).
 - `LOAD_BALANCER_PORT`: port HTTP principal (defaut `5000`).
 - `SOCKET_NUMBER`: nombre de serveurs socket lances (`2` par defaut).
-- `SOCKET_ASYNC_MODE`: mode Socket.IO (`gevent` recommande en production).
 - `SOCKET_WORKERS`: nombre de threads pour les traitements lourds websocket.
 - `CORS_ALLOWED_ORIGINS`: liste d'origines autorisees separees par des virgules.
 - `APP_SECRET_KEY`: secret Flask (obligatoire en production).
@@ -46,7 +45,7 @@ Execution avec Docker Compose:
 
 ```bash
 cp .env.example .env
-docker compose up --build
+docker compose up -d --build
 ```
 
 L'application expose le web sur `5000` et les sockets sur `5001` et `5002`.
