@@ -10,7 +10,7 @@ Il est basé sur l'article scientifique suivant :
 
 ## 🌍 Démo en ligne  
 
-🔗 [Accédez au site web](https://harmony.jhune.dev)  
+🔗 [Accédez au site web](https://harmony.donovann.dev)  
 
 ## 🚀 Installation et exécution  
 
