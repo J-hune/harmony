@@ -1,67 +1,17 @@
 import time
+
 import numpy as np
-import scipy
 from numpy import median
 from scipy.spatial import ConvexHull, Delaunay
 from scipy import sparse
 
-try:
-    from flask_socketio import emit
-except Exception:
-    def emit(*args, **kwargs):
-        del args, kwargs
-        return None
+from geometry import closest_points_on_hull
 
 
 def _emit(emitter, event, payload):
+    """Transmet un événement au client via l'émetteur fourni (aucun envoi sinon)."""
     if emitter is not None:
         emitter(event, payload)
-    else:
-        emit(event, payload)
-
-# -------------------------------------------------------------------------
-# 1. Fonction de projection point-triangle
-# -------------------------------------------------------------------------
-def point_triangle_distance(P, triangle):
-    """
-    Calcule la distance entre un point P et un triangle (3x3).
-    Retourne un dictionnaire contenant :
-       - 'parameter': les coordonnées barycentriques [u, v, w] (u = 1-v-w)
-       - 'closest': le point du triangle le plus proche de P
-       - 'sqrDistance': la distance au carré
-       - 'distance': la distance euclidienne
-    """
-    # triangle : (V0, V1, V2)
-    V0, V1, V2 = triangle
-    E0, E1 = V1 - V0, V2 - V0
-    D = V0 - P
-
-    a, b, c = np.dot(E0, E0), np.dot(E0, E1), np.dot(E1, E1)
-    d, e = np.dot(E0, D), np.dot(E1, D)
-    det = a * c - b * b
-
-    s = (b * e - c * d)
-    t = (b * d - a * e)
-
-    # Cas des régions avec calcul vectorisé
-    if (s + t) <= det:
-        s = np.clip(s / det, 0, 1)
-        t = np.clip(t / det, 0, 1)
-    else:
-        tmp0, tmp1 = b + d, c + e
-        if tmp1 > tmp0:
-            s = np.clip((tmp1 - tmp0) / (a - 2 * b + c), 0, 1)
-            t = 1 - s
-        else:
-            t = np.clip(-e / c, 0, 1)
-            s = 0
-
-    u = 1 - s - t
-    closest = u * V0 + s * V1 + t * V2
-    diff = P - closest
-    sqrDistance = np.dot(diff, diff)
-    distance = np.sqrt(sqrDistance)
-    return {'parameter': [u, s, t], 'closest': closest, 'sqrDistance': sqrDistance, 'distance': distance}
 
 
 def extract_rgbxy_weights(palette_rgb, image_orig, emitter=None):
@@ -82,17 +32,18 @@ def extract_rgbxy_weights(palette_rgb, image_orig, emitter=None):
     combined_data = np.dstack((img, norm_grid))  # (H, W, 5)
 
     t0 = time.time()
-    hull_combined = ConvexHull(combined_data.reshape(-1, 5))
+    rgbxy_points = combined_data.reshape(-1, 5)
+    hull_vertices = ConvexHull(rgbxy_points).vertices
 
     # Poids ASAP en RGB via la méthode Tan 2016
-    hull_rgb = img.reshape(-1, 3)[hull_combined.vertices].reshape(-1, 1, 3)
+    hull_rgb = img.reshape(-1, 3)[hull_vertices].reshape(-1, 1, 3)
     asap_weights = compute_asap_weights_tan2016(hull_rgb, palette_rgb, emitter=emitter)
     if asap_weights is None:
         return
 
     # Poids RGBXY via triangulation Delaunay
-    hull_pts = hull_combined.points[hull_combined.vertices]
-    delaunay_weights = compute_delaunay_barycentric_weights(hull_pts, hull_combined.points, option=3)
+    hull_pts = rgbxy_points[hull_vertices]
+    delaunay_weights = compute_delaunay_barycentric_weights(hull_pts, rgbxy_points, option=3)
     _emit(emitter, "server_log", {"data": f"Calcul des poids RGBXY terminé en {time.time() - t0:.2f} s."})
 
     # Combinaison des poids et reconstruction de l'image
@@ -228,15 +179,10 @@ def enforce_inside_hull(labels, hull_obj, delaunay_obj):
     """
     inside = delaunay_obj.find_simplex(labels, tol=1e-8)
     corrected = labels.copy()
-    for idx in range(labels.shape[0]):
-        if inside[idx] < 0:
-            dists = []
-            close_pts = []
-            for simplex in hull_obj.simplices:
-                res = point_triangle_distance(labels[idx], hull_obj.points[simplex])
-                dists.append(res['distance'])
-                close_pts.append(res['closest'])
-            corrected[idx] = close_pts[np.argmin(np.asarray(dists))]
+    outside = inside < 0
+    if outside.any():
+        # Chaque point extérieur est ramené au point le plus proche de la surface
+        corrected[outside], _ = closest_points_on_hull(labels[outside], hull_obj.points, hull_obj.simplices)
     new_inside = delaunay_obj.find_simplex(corrected, tol=1e-8)
     assert np.all(new_inside >= 0), "Certains points sont toujours hors de l'enveloppe"
     return corrected

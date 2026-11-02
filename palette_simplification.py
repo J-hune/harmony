@@ -2,44 +2,57 @@ import time
 import cvxopt
 import cvxopt.solvers
 import numpy as np
-from scipy.spatial import ConvexHull, Delaunay, cKDTree
+from scipy.spatial import ConvexHull, Delaunay
 
-try:
-    from flask_socketio import emit
-except Exception:
-    def emit(*args, **kwargs):
-        del args, kwargs
-        return None
+from geometry import closest_points_on_hull
 
+# Critère d'arrêt de la simplification (Tan, Echevarria & Gingold 2018, §3.1) :
+# on simplifie tant que l'erreur de reconstruction géométrique reste sous une
+# tolérance choisie par l'utilisateur (2/255 dans les expériences de l'article),
+# en ne la mesurant qu'à partir de 10 sommets.
+RMSE_TOLERANCE = 2 / 255
+RMSE_CHECK_MAX_VERTICES = 10
+# Pour l'efficacité, l'erreur est mesurée sur un histogramme RGB de 32x32x32 cases.
+RMSE_HISTOGRAM_BINS = 32
 
 def _emit(emitter, event, payload):
+    """Transmet un événement au client via l'émetteur fourni (aucun envoi sinon)."""
     if emitter is not None:
         emitter(event, payload)
-    else:
-        emit(event, payload)
 
-def compute_rmse(points, hull_points):
+
+def compute_rmse(points, hull_points, bins=RMSE_HISTOGRAM_BINS):
     """
-    Calcule l'erreur quadratique moyenne (RMSE) entre un nuage de points
-    et une enveloppe convexe donnée.
+    Calcule l'erreur de reconstruction géométrique d'une palette : la RMSE de
+    la distance de chaque couleur à l'enveloppe convexe de la palette (0 pour
+    les couleurs à l'intérieur), comme dans Tan et al. 2018, §3.1.
+
+    Pour l'efficacité, les couleurs sont regroupées dans un histogramme
+    bins x bins x bins : chaque case non vide est représentée par sa couleur
+    moyenne et pondérée par son nombre de pixels.
 
     Paramètres:
-      - points: np.array de forme (N, 3) (par exemple, des couleurs ou positions)
-      - hull_points: np.array des sommets de l'enveloppe convexe
+      - points: np.array (N, 3), couleurs dans [0, 1]
+      - hull_points: np.array (M, 3), sommets de l'enveloppe (la palette)
+      - bins: nombre de cases par canal
 
     Retourne:
-      - La RMSE (float)
+      - La RMSE (float, même unité que les couleurs)
     """
-    # On construit une triangulation de Delaunay à partir des sommets de l'enveloppe
-    # pour déterminer quels points se trouvent à l'intérieur de celle-ci.
-    delaunay = Delaunay(hull_points)
-    inside = delaunay.find_simplex(points) >= 0
-    tree = cKDTree(hull_points)
-    min_distances, _ = tree.query(points)
-    min_distances[inside] = 0
+    cells = np.clip((points * bins).astype(int), 0, bins - 1)
+    keys = (cells[:, 0] * bins + cells[:, 1]) * bins + cells[:, 2]
+    unique_keys, index, counts = np.unique(keys, return_inverse=True, return_counts=True)
+    centers = np.zeros((len(unique_keys), 3))
+    np.add.at(centers, index.ravel(), points)
+    centers /= counts[:, None]
 
-    # On retourne la racine carrée de la moyenne des carrés des distances minimales.
-    return np.sqrt(np.mean(min_distances ** 2))
+    hull = ConvexHull(hull_points)
+    outside = Delaunay(hull_points).find_simplex(centers) < 0
+    distances = np.zeros(len(centers))
+    if outside.any():
+        _, distances[outside] = closest_points_on_hull(centers[outside], hull_points, hull.simplices)
+
+    return np.sqrt((counts * distances ** 2).sum() / counts.sum())
 
 
 def convert_convex_hull_faces(hull):
@@ -288,10 +301,24 @@ def simplify_convex_palette(points, target_vertices=10, max_iterations=500, emit
         best_candidate = min(candidate_collapses, key=lambda x: x[0])
         best_new_vertex = best_candidate[2]
 
-        # On ajoute le nouveau sommet et on recalcule l'enveloppe convexe.
-        updated_vertices = np.vstack((current_vertices, best_new_vertex.reshape(1, 3)))
+        # On remplace les deux sommets de l'arête par le nouveau sommet, puis on
+        # recalcule l'enveloppe convexe (d'autres sommets peuvent devenir concaves).
+        collapsed_edge = list(best_candidate[1])
+        updated_vertices = np.vstack((np.delete(current_vertices, collapsed_edge, axis=0),
+                                      best_new_vertex.reshape(1, 3)))
         new_hull = ConvexHull(updated_vertices)
-        current_vertices = updated_vertices[new_hull.vertices]
+        candidate_vertices = updated_vertices[new_hull.vertices]
+
+        # On refuse une fusion qui ferait dépasser la tolérance. L'erreur est mesurée
+        # sur la palette finale, ramenée dans le cube RGB : c'est ce rognage qui
+        # fait sortir des couleurs de l'enveloppe.
+        if len(candidate_vertices) <= RMSE_CHECK_MAX_VERTICES:
+            rmse = compute_rmse(points, np.clip(candidate_vertices, 0, 1))
+            if rmse > RMSE_TOLERANCE:
+                _emit(emitter, 'server_log', {'data': f"Simplification palette: arrêt à {len(current_vertices)} couleurs (erreur {rmse * 255:.2f}/255 au-delà de la tolérance)."})
+                break
+
+        current_vertices = candidate_vertices
         current_faces = np.array(convert_convex_hull_faces(new_hull))
 
         iteration += 1
@@ -301,13 +328,6 @@ def simplify_convex_palette(points, target_vertices=10, max_iterations=500, emit
         # On vérifie si le nombre de sommets n'évolue plus ou atteint un minimum (ex. 4 sommets).
         if len(current_vertices) == previous_vertex_count or len(current_vertices) == 4:
             break
-
-        # Si le nombre de sommets est faible, on vérifie la qualité de la simplification via RMSE.
-        if len(current_vertices) <= 20:
-            test_vertices = np.clip(current_vertices, 0, 1)
-            rmse = compute_rmse(points, test_vertices)
-            if rmse > 4 / 255:
-                break
 
     current_vertices = np.clip(current_vertices, 0, 1)
     _emit(emitter, "server_log", {"data": f"Simplification palette terminée en {time.time() - t0:.2f} s."})
