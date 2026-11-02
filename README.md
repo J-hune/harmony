@@ -1,51 +1,59 @@
-# 🪄 Harmonisation d'images  
+# Harmonisation d’images
 
-Ce projet permet l’harmonisation d’images via extraction de palette, décomposition dans l’espace RGBXY et transfert de couleur.  
-Il est basé sur l'article scientifique suivant :
+Extraction de palette, décomposition en couches et recoloration d’images selon une harmonie de couleurs.
+Implémentation de l’article de Tan, Echevarria et Gingold (2018), [_Palette-based image decomposition, harmonization, and color transfer_](https://arxiv.org/abs/1804.01225).
 
-📄 **Tan, J., Echevarria, J. I., & Gingold, Y. I. (2018).**  
-[*Palette-based image decomposition, harmonization, and color transfer*](https://arxiv.org/pdf/1804.01225)  
+<img width="1440" alt="Interface de l’application : image d’origine, palette, harmonies, espace RGB et image recolorée" src="docs/app.webp" />
 
-<img width="1440" alt="app" src="https://github.com/user-attachments/assets/1f83646a-fa16-4add-9cc8-5d3b4443c281" />
+Démo en ligne : [harmony.donovann.dev](https://harmony.donovann.dev)
 
-## 🌍 Démo en ligne  
+## Fonctionnement
 
-🔗 [Accédez au site web](https://harmony.donovann.dev)  
+1. **Palette** : l’enveloppe convexe des couleurs de l’image est simplifiée jusqu’à une palette de quelques couleurs, tant que l’erreur de reconstruction reste sous 2/255.
+2. **Couches** : l’image est décomposée en une couche par couleur de la palette, dans l’espace RGBXY (couleur et position), ce qui garde des couches spatialement cohérentes.
+3. **Recoloration** : des palettes harmonisées sont proposées (complémentaire, triadique, en carré…), et chaque couleur peut aussi être déplacée à la main dans l’espace RGB. L’image est recomposée en direct.
 
-## 🚀 Installation et exécution  
+## Lancer en local
 
-Clonez le projet et installez les dépendances nécessaires :  
+Le projet est testé avec Python 3.12, la version utilisée par l’image Docker.
 
 ```bash
 git clone https://github.com/J-hune/harmony.git
 cd harmony
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
 python main.py
-```  
+```
 
-Le [site sera accessible](http://127.0.0.1:5000) sur le port **5000**.
+L’application est accessible sur [127.0.0.1:5000](http://127.0.0.1:5000).
 
-## ⚙️ Variables d'environnement
+## Configuration
 
-Les principales variables disponibles dans `.env` sont:
+Les réglages se font par variables d’environnement. `main.py` ne lit pas le fichier `.env` lui-même : en local, chargez-le dans le shell avant de lancer l’application.
 
-- `HOST`: host d'ecoute Flask/Socket.IO (`127.0.0.1` en local, `0.0.0.0` en container).
-- `LOAD_BALANCER_PORT`: port HTTP principal (defaut `5000`).
-- `SOCKET_NUMBER`: nombre de serveurs socket lances (`2` par defaut).
-- `SOCKET_WORKERS`: nombre de threads pour les traitements lourds websocket.
-- `CORS_ALLOWED_ORIGINS`: liste d'origines autorisees separees par des virgules.
-- `APP_SECRET_KEY`: secret Flask (obligatoire en production).
+```bash
+cp .env.example .env
+set -a; source .env; set +a
+python main.py
+```
 
-## 🐳 Docker
+| Variable               | Rôle (valeur par défaut)                                         |
+| ---------------------- | ---------------------------------------------------------------- |
+| `HOST`                 | Adresse d’écoute (`127.0.0.1`, ou `0.0.0.0` dans un conteneur)   |
+| `LOAD_BALANCER_PORT`   | Port HTTP (`5000`)                                               |
+| `SOCKET_NUMBER`        | Nombre de serveurs de calcul, sur les ports qui suivent (`2`)    |
+| `SOCKET_WORKERS`       | Threads de calcul par serveur (jusqu’à `4`, selon le processeur) |
+| `CORS_ALLOWED_ORIGINS` | Origines autorisées, séparées par des virgules                   |
+| `APP_SECRET_KEY`       | Secret Flask, obligatoire en production                          |
 
-Execution avec Docker Compose:
+La liste complète se trouve dans `.env.example`.
+
+## Docker
 
 ```bash
 cp .env.example .env
 docker compose up -d --build
 ```
 
-L'application expose le web sur `5000` et les sockets sur `5001` et `5002`.
+Docker Compose lit `.env` directement. Les ports publiés dans `docker-compose.yml` doivent correspondre à `LOAD_BALANCER_PORT` et aux `SOCKET_NUMBER` ports qui le suivent.
