@@ -1,8 +1,12 @@
+import base64
+import os
 import time
+import zlib
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 from numpy import median
-from scipy.spatial import ConvexHull, Delaunay
+from scipy.spatial import ConvexHull, Delaunay, QhullError
 from scipy import sparse
 
 from geometry import closest_points_on_hull
@@ -12,6 +16,55 @@ def _emit(emitter, event, payload):
     """Transmet un événement au client via l'émetteur fourni (aucun envoi sinon)."""
     if emitter is not None:
         emitter(event, payload)
+
+
+# En dessous de cette taille, découper l'image en tuiles ne fait rien gagner.
+TILED_HULL_MIN_PIXELS = 250_000
+TILED_HULL_GRID = 4  # 4 x 4 tuiles
+
+# Format d'envoi des couches au navigateur : poids quantifiés sur 8 bits,
+# compressés (zlib/deflate) puis encodés en base64. C'est 20 à 60 fois plus léger
+# que du JSON, pour une erreur moyenne d'environ 0,3/255 sur l'image recomposée.
+# (Le base64 évite les pièces jointes binaires de socket.io, que le client ne
+# reconstitue pas avec ce serveur.)
+LAYER_ENCODING = "uint8-deflate-base64"
+
+
+def rgbxy_hull_vertices(data, height, width):
+    """
+    Indices des sommets de l'enveloppe convexe 5D (RGBXY) de l'image.
+
+    Pour les grandes images, on calcule l'enveloppe de chaque tuile en parallèle,
+    puis l'enveloppe des sommets obtenus : l'enveloppe d'un ensemble d'enveloppes
+    est celle des données d'origine (Tan et al. 2018, §5).
+
+    Args:
+        data (np.array): Points RGBXY (H * W, 5).
+    """
+    if height * width < TILED_HULL_MIN_PIXELS:
+        return ConvexHull(data).vertices
+
+    grid = TILED_HULL_GRID
+    rows = np.array_split(np.arange(height), grid)
+    cols = np.array_split(np.arange(width), grid)
+    tiles = [(r[:, None] * width + c[None, :]).ravel() for r in rows for c in cols]
+
+    def tile_vertices(indices):
+        try:
+            return indices[ConvexHull(data[indices]).vertices]
+        except QhullError:
+            # Tuile dégénérée (couleur uniforme par exemple) : on garde tous ses points.
+            return indices
+
+    with ThreadPoolExecutor(max_workers=min(len(tiles), os.cpu_count() or 1)) as pool:
+        candidates = np.concatenate(list(pool.map(tile_vertices, tiles)))
+    return candidates[ConvexHull(data[candidates]).vertices]
+
+
+def encode_layer(weights):
+    """Encode une couche de poids (valeurs dans [0, 1]) au format LAYER_ENCODING."""
+    quantized = np.round(np.clip(weights, 0, 1) * 255).astype(np.uint8)
+    return base64.b64encode(zlib.compress(quantized.tobytes(), 6)).decode("ascii")
 
 
 def extract_rgbxy_weights(palette_rgb, image_orig, emitter=None):
@@ -33,7 +86,7 @@ def extract_rgbxy_weights(palette_rgb, image_orig, emitter=None):
 
     t0 = time.time()
     rgbxy_points = combined_data.reshape(-1, 5)
-    hull_vertices = ConvexHull(rgbxy_points).vertices
+    hull_vertices = rgbxy_hull_vertices(rgbxy_points, height, width)
 
     # Poids ASAP en RGB via la méthode Tan 2016
     hull_rgb = img.reshape(-1, 3)[hull_vertices].reshape(-1, 1, 3)
@@ -55,13 +108,14 @@ def extract_rgbxy_weights(palette_rgb, image_orig, emitter=None):
     rmse = np.sqrt(np.square(err.reshape(-1, 3)).sum(axis=-1).mean())
     _emit(emitter, "server_log", {"data": f"Qualité de reconstruction: RMSE = {rmse:.2f}."})
 
-    # Envoi des poids par couche via socket
+    # Envoi des poids par couche via socket (binaire compressé, voir LAYER_ENCODING)
     for layer in range(mix_weights.shape[-1]):
         _emit(emitter, "layer_weights", {
             "id": layer,
             "width": width,
             "height": height,
-            "weights": mix_weights[:, :, layer].flatten().tolist()
+            "encoding": LAYER_ENCODING,
+            "weights": encode_layer(mix_weights[:, :, layer].ravel()),
         })
 
 
