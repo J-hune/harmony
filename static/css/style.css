@@ -478,6 +478,48 @@ body {
 
 /* --- Petits écrans : l'espace RGB passe au-dessus du panneau ------ */
 
+/* --- Éléments propres au parcours mobile -------------------------- */
+
+/* Sur desktop, ces éléments n'existent pas : tout est visible en même temps. */
+.mobile-intro,
+.drop-zone-cta,
+.rgb-header,
+.result-hint {
+   display: none;
+}
+
+/* Titres de section repliables : sur desktop, ce sont de simples titres. */
+.section-toggle {
+   padding: 0;
+   border: none;
+   background: none;
+   font: inherit;
+   color: inherit;
+   text-align: left;
+}
+
+.section-toggle:disabled {
+   cursor: default;
+}
+
+/* Comparaison en maintenant l'image : pas de menu contextuel ni de sélection. */
+.result-frame {
+   -webkit-touch-callout: none;
+   user-select: none;
+   -webkit-user-select: none;
+}
+
+#compare-image {
+   pointer-events: none;
+}
+
+/* --- Petits écrans : un parcours en une colonne ------------------- */
+/*
+ * Ordre : avancement, image, résultat (qui reste en haut de l'écran),
+ * harmonies en bandeau, puis palette, espace RGB et couches repliés.
+ * Panneau et scène sont « dissous » (display: contents) pour pouvoir
+ * réordonner librement leurs blocs.
+ */
 @media (max-width: 900px) {
    :root {
       --pad: 18px;
@@ -490,42 +532,40 @@ body {
 
    .workspace {
       display: flex;
-      flex-direction: column-reverse;
+      flex-direction: column;
    }
 
-   .panel {
-      overflow: visible;
-      border-right: none;
+   .panel,
+   .stage {
+      display: contents;
    }
 
-   .stage,
-   .stage.has-result {
-      width: 100%;
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: 52vh auto auto;
-      grid-template-rows: 52svh auto auto;
-      border-bottom: 1px solid var(--line);
+   .status-area { order: 1; }
+   .panel-section:has(#image-title) { order: 2; }
+   .result-pane { order: 3; }
+   #harmonies-section { order: 4; }
+   #palette-section { order: 5; }
+   .rgb-header { order: 6; }
+   .stage-hint { order: 7; }
+   #webgl-output { order: 8; }
+   #layers-section { order: 9; }
+
+   /* Avant toute image : seulement l'invitation à en choisir une. */
+   .workspace:has(#previews-container.hidden) :is(.status-area, .rgb-header) {
+      display: none;
    }
 
-   .result-pane {
-      grid-row: 2;
-      border-left: none;
-      border-top: 1px solid var(--line);
-   }
-
-   .result-view {
-      flex: none;
-      height: 60vh;
-      height: 60svh;
-   }
-
+   /* --- Avancement (en haut) --- */
    .status-area {
-      grid-row: 3;
+      display: flex;
+      flex-direction: column;
    }
 
    .status {
       flex-wrap: wrap;
       gap: 8px 18px;
+      border-top: none;
+      border-bottom: 1px solid var(--line);
    }
 
    .status-text {
@@ -536,5 +576,177 @@ body {
 
    .journal-toggle {
       margin-left: auto;
+   }
+
+   .journal {
+      order: 2;
+      position: static;
+      max-height: 40vh;
+      border-top: none;
+      border-bottom: 1px solid var(--line);
+   }
+
+   /* --- Image --- */
+   .mobile-intro {
+      display: block;
+      margin: 0 0 18px;
+      color: var(--text-muted);
+      font-size: 0.9375rem;
+      line-height: 1.6;
+   }
+
+   .workspace:has(#previews-container:not(.hidden)) .mobile-intro {
+      display: none;
+   }
+
+   .drop-zone {
+      align-items: flex-start;
+      padding: 0;
+      border: none;
+      text-align: left;
+   }
+
+   .drop-zone .drop-zone-cta {
+      display: inline-block;
+   }
+
+   .drop-zone :is(.drop-zone-title, .drop-zone-action) {
+      display: none;
+   }
+
+   .original-preview img {
+      max-width: 100%;
+      max-height: 40svh;
+   }
+
+   /* Une fois le résultat prêt, la comparaison se fait sur le résultat lui-même. */
+   .workspace:has(#result-pane:not(.hidden)) #previews-container {
+      display: none;
+   }
+
+   .workspace:has(#result-pane:not(.hidden)) .panel-section:has(#image-title) .section-header {
+      margin-bottom: 0;
+   }
+
+   /* --- Résultat : reste visible pendant qu'on parcourt les harmonies --- */
+   .result-pane {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      padding: 12px var(--pad) 10px;
+      border-left: none;
+      border-bottom: 1px solid var(--line);
+      background: var(--black);
+   }
+
+   .result-header {
+      margin-bottom: 10px;
+   }
+
+   #compare-original {
+      display: none;
+   }
+
+   .result-view {
+      flex: none;
+      height: 42vh;
+      height: 42svh;
+   }
+
+   .result-hint {
+      display: block;
+      margin: 8px 0 0;
+      color: var(--text-faint);
+      font-size: 0.8125rem;
+      text-align: center;
+   }
+
+   /* --- Harmonies : bandeau horizontal --- */
+   .harmony-list {
+      display: flex;
+      gap: 10px;
+      margin: 0 calc(var(--pad) * -1);
+      padding: 0 var(--pad) 4px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      scroll-padding-inline: var(--pad);
+      scrollbar-width: none;
+   }
+
+   .harmony-list li {
+      flex: 0 0 min(42vw, 180px);
+      scroll-snap-align: start;
+   }
+
+   .harmony-button {
+      grid-template-columns: minmax(0, 1fr);
+      align-content: start;
+      gap: 10px;
+      height: 100%;
+      padding: 10px;
+   }
+
+   .harmony-button .swatches {
+      order: -1;
+      height: 36px;
+   }
+
+   /* --- Sections repliables --- */
+   .section-header h2 {
+      flex: 1;
+   }
+
+   .section-toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      cursor: pointer;
+   }
+
+   /* Indicateur à gauche du titre : il ne se mélange pas aux actions de la section. */
+   .section-toggle::before {
+      content: "+";
+      width: 1ch;
+      color: var(--text-muted);
+      font-weight: 400;
+   }
+
+   .section-toggle[aria-expanded="true"]::before {
+      content: "−";
+   }
+
+   .collapsible:not(.is-open) .section-body {
+      display: none;
+   }
+
+   .collapsible:not(.is-open) .section-header {
+      margin-bottom: 0;
+   }
+
+   /* --- Espace RGB (replié par défaut) --- */
+   .rgb-header {
+      display: flex;
+      margin: 0;
+      padding: 20px var(--pad);
+      border-bottom: 1px solid var(--line);
+   }
+
+   .stage:not(.rgb-open) :is(#webgl-output, .stage-hint) {
+      display: none !important;
+   }
+
+   /* Assez bas pour tenir sous le résultat collé en haut : on voit l'image
+      changer en direct en déplaçant un sommet. */
+   #webgl-output {
+      height: 48vh;
+      height: 48svh;
+      border-bottom: 1px solid var(--line);
+   }
+
+   .stage-hint {
+      position: static;
+      max-width: none;
+      padding: 14px var(--pad) 0;
    }
 }

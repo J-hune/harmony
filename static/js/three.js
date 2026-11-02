@@ -162,12 +162,10 @@ class ThreeSceneManager {
       this.scene.background = new THREE.Color(0x000000);
 
       // On configure la caméra
-      this.camera = new THREE.PerspectiveCamera(
-         75,
-         container.clientWidth / container.clientHeight,
-         0.1,
-         100,
-      );
+      // La zone peut être masquée au chargement (espace RGB replié sur mobile) :
+      // on évite alors un rapport 0/0 (NaN) pour la caméra.
+      const aspect = container.clientHeight ? container.clientWidth / container.clientHeight : 1;
+      this.camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 100);
       this.camera.position.set(1, 1, 1);
 
       // On configure le renderer
@@ -513,11 +511,16 @@ class ThreeSceneManager {
    }
 
    animate() {
+      requestAnimationFrame(this.animate.bind(this));
+
+      // Zone masquée (espace RGB replié sur mobile) : aucun rendu, rien à afficher
+      const container = this.renderer.domElement.parentElement;
+      if (!container.clientWidth || !container.clientHeight) return;
+
       // On fait en sorte que les contours des cercles regardent toujours vers la caméra
       if (this.overlayMesh.rims) {
          this.overlayMesh.rims.children.forEach((rim) => rim.lookAt(this.camera.position));
       }
-      requestAnimationFrame(this.animate.bind(this));
       this.controls.update();
       this.renderer.render(this.scene, this.camera);
    }

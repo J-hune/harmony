@@ -42,6 +42,10 @@
                   </button>
                </div>
 
+               <p class="mobile-intro">
+                  Choisissez une image&nbsp;: l’application en extrait la palette et vous propose
+                  des harmonies pour la recolorer.
+               </p>
                <div
                   class="drop-zone"
                   id="drag-area"
@@ -49,6 +53,7 @@
                   tabindex="0"
                   aria-describedby="drop-zone-formats"
                >
+                  <span class="button drop-zone-cta">Choisir une image</span>
                   <span class="drop-zone-title">Déposez une image ici</span>
                   <span class="drop-zone-action"
                      >ou <span class="drop-zone-link">parcourir vos fichiers</span></span
@@ -67,12 +72,21 @@
 
             <!-- Palette -->
             <section
-               class="panel-section hidden"
+               class="panel-section hidden collapsible"
                id="palette-section"
                aria-labelledby="palette-title"
             >
                <div class="section-header">
-                  <h2 id="palette-title">Palette</h2>
+                  <h2 id="palette-title">
+                     <button
+                        type="button"
+                        class="section-toggle"
+                        aria-expanded="false"
+                        aria-controls="palette-body"
+                     >
+                        Palette
+                     </button>
+                  </h2>
                   <div class="section-actions">
                      <button type="button" class="text-button hidden" id="rollback-palette">
                         Réinitialiser
@@ -83,7 +97,7 @@
                   </div>
                </div>
 
-               <div class="palette-choices">
+               <div class="section-body palette-choices" id="palette-body">
                   <button
                      type="button"
                      class="palette-choice"
@@ -206,21 +220,43 @@
 
             <!-- Couches -->
             <section
-               class="panel-section hidden"
+               class="panel-section hidden collapsible"
                id="layers-section"
                aria-labelledby="layers-title"
             >
                <div class="section-header">
-                  <h2 id="layers-title">Couches</h2>
+                  <h2 id="layers-title">
+                     <button
+                        type="button"
+                        class="section-toggle"
+                        aria-expanded="false"
+                        aria-controls="layers-container"
+                     >
+                        Couches
+                     </button>
+                  </h2>
                   <button type="button" class="text-button hidden" id="download-layers">
                      Télécharger
                   </button>
                </div>
-               <div class="layers" id="layers-container"></div>
+               <div class="section-body layers" id="layers-container"></div>
             </section>
          </aside>
 
          <main class="stage" id="stage" aria-label="Espace RGB et résultat">
+            <div class="section-header rgb-header">
+               <h2>
+                  <button
+                     type="button"
+                     class="section-toggle"
+                     id="rgb-toggle"
+                     aria-expanded="false"
+                     aria-controls="webgl-output"
+                  >
+                     Espace RGB
+                  </button>
+               </h2>
+            </div>
             <div id="webgl-output"></div>
 
             <section class="result-pane hidden" id="result-pane" aria-labelledby="result-title">
@@ -246,6 +282,7 @@
                      <img id="compare-image" class="hidden" alt="Image originale" src="" />
                   </div>
                </div>
+               <p class="result-hint">Maintenez l’image pour voir l’originale.</p>
             </section>
 
             <p class="stage-hint hidden" id="stage-hint">

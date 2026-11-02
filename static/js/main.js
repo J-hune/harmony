@@ -316,6 +316,45 @@ function initCompareButton() {
    });
    button.addEventListener('keyup', () => show(false));
    button.addEventListener('blur', () => show(false));
+
+   // On peut aussi maintenir l'image elle-même (geste principal sur mobile).
+   // Au toucher, un court délai évite un clignotement quand le geste est en
+   // fait un défilement : le navigateur l'annule alors (pointercancel).
+   const frame = $('result-frame');
+   let pressTimer = 0;
+   frame.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      clearTimeout(pressTimer);
+      pressTimer = setTimeout(() => show(true), e.pointerType === 'touch' ? 150 : 0);
+   });
+   ['pointerup', 'pointercancel', 'pointerleave'].forEach((type) =>
+      frame.addEventListener(type, () => {
+         clearTimeout(pressTimer);
+         show(false);
+      }),
+   );
+   frame.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+
+/**
+ * Sections repliables (palette, espace RGB, couches) : actives uniquement sur
+ * petit écran, où le parcours tient en une colonne. Sur desktop, tout reste visible.
+ */
+function initCollapsibleSections() {
+   const smallScreen = window.matchMedia('(max-width: 900px)');
+   const toggles = document.querySelectorAll('.section-toggle');
+   const sync = () => toggles.forEach((toggle) => (toggle.disabled = !smallScreen.matches));
+   smallScreen.addEventListener('change', sync);
+   sync();
+
+   toggles.forEach((toggle) =>
+      toggle.addEventListener('click', () => {
+         const open = toggle.getAttribute('aria-expanded') !== 'true';
+         toggle.setAttribute('aria-expanded', String(open));
+         if (toggle.id === 'rgb-toggle') $('stage').classList.toggle('rgb-open', open);
+         else toggle.closest('.collapsible').classList.toggle('is-open', open);
+      }),
+   );
 }
 
 /**
@@ -396,6 +435,7 @@ function initWebFeatures() {
    });
    $('change-image').addEventListener('click', openPicker);
    initCompareButton();
+   initCollapsibleSections();
 
    input.addEventListener('change', (e) => {
       onImageUpload(e.target.files[0]);
