@@ -1,45 +1,66 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Application d'harmonisation d'images basée sur la décomposition par palette et le transfert de couleur, utilisant l'algorithme de Tan et al. (2018).">
-    <meta name="keywords" content="accueil, harmonisation d'images, décomposition par palette, transfert de couleur, Tan et al. 2018">
-    <meta name="robots" content="index, follow">
+   <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <meta
+         name="description"
+         content="Application d'harmonisation d'images basée sur la décomposition par palette et le transfert de couleur, utilisant l'algorithme de Tan et al. (2018)."
+      />
+      <meta
+         name="keywords"
+         content="accueil, harmonisation d'images, décomposition par palette, transfert de couleur, Tan et al. 2018"
+      />
+      <meta name="robots" content="index, follow" />
 
-    <link rel="apple-touch-icon" sizes="180x180" href="../static/favicons/apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="../static/favicons/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="../static/favicons/favicon-16x16.png">
-    <link rel="manifest" href="../static/favicons/site.webmanifest">
+      <link rel="apple-touch-icon" sizes="180x180" href="../static/favicons/apple-touch-icon.png" />
+      <link rel="icon" type="image/png" sizes="32x32" href="../static/favicons/favicon-32x32.png" />
+      <link rel="icon" type="image/png" sizes="16x16" href="../static/favicons/favicon-16x16.png" />
+      <link rel="manifest" href="../static/favicons/site.webmanifest" />
 
-    <title>Harmonisation d'images - Tan et al. (2018)</title>
-    <link rel="stylesheet" href="../static/css/homepage.css">
-</head>
-<div id="webgl-output"></div>
-<div class="container">
-    <h1><img src="../static/img/wand.webp" alt="🪄">Harmonisation d'images</h1>
-    <h2>Cette application est basée sur l'article de Tan, J., Echevarria, J. I., & Gingold, Y. I. (2018) <br>
-        <a href="https://dl.acm.org/doi/10.1145/3272127.3275054" target="_blank" rel="noopener noreferrer">“Palette-based image decomposition, harmonization, and color transfer”</a>
-    </h2>
-    <p>Vous voulez nous aider ? <a href="/feedback">Donnez votre avis ici !</a></p>
+      <title>Harmonisation d'images - Tan et al. (2018)</title>
+      <link rel="stylesheet" href="../static/css/base.css" />
+      <link rel="stylesheet" href="../static/css/homepage.css" />
+   </head>
+   <body>
+      <div id="webgl-output" aria-hidden="true"></div>
 
-    <a href="/app" aria-label="Accéder à l'application">Accéder à l'application</a>
-</div>
-<div class="footer">
-    Made with ❤️ by Jhune - <a href="https://github.com/J-hune">Donovann Zassot </a>
-</div>
-<body>
+      <main class="hero">
+         <h1>Harmonisation d’images</h1>
+         <p class="lede">
+            Chargez une image&nbsp;: l’application extrait sa palette, la décompose en couches de
+            couleur et la recolore selon une harmonie.
+         </p>
+         <p class="reference">
+            D’après Tan, Echevarria &amp; Gingold (2018),
+            <a
+               href="https://dl.acm.org/doi/10.1145/3272127.3275054"
+               target="_blank"
+               rel="noopener noreferrer"
+               >Palette-based image decomposition, harmonization, and color transfer</a
+            >.
+         </p>
+         <div class="actions">
+            <a class="button" href="/app">Accéder à l’application</a>
+            <a class="secondary-link" href="/feedback">Donner votre avis</a>
+         </div>
+      </main>
 
-<!-- ImportMap pour charger les modules depuis CDN -->
-<script type="importmap">
-    {
-      "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.min.js",
-        "three/": "https://cdn.jsdelivr.net/npm/three@0.172.0/"
-      }
-    }
-</script>
+      <footer class="footer">
+         Made with ❤️ by Donovann -
+         <a href="https://github.com/J-hune">Donovann Zassot</a>
+      </footer>
 
-<script type="module" src="../static/js/homepage.js" defer></script>
-</body>
+      <!-- ImportMap pour charger les modules depuis CDN -->
+      <script type="importmap">
+         {
+            "imports": {
+               "three": "https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.min.js",
+               "three/": "https://cdn.jsdelivr.net/npm/three@0.172.0/"
+            }
+         }
+      </script>
+
+      <script type="module" src="../static/js/homepage.js" defer></script>
+   </body>
 </html>

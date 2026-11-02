@@ -1,243 +1,330 @@
-import {io} from "socket.io";
+import { io } from 'socket.io';
 
-import {LayerManager} from './layers.js';
-import {PaletteManager} from './palettes.js';
-import {ThreeSceneManager} from './three.js';
-import {TerminalManager} from './terminal.js';
-import {TooltipsManager} from './tooltips.js';
+import { LayerManager } from './layers.js';
+import { PaletteManager } from './palettes.js';
+import { ThreeSceneManager } from './three.js';
+import { StatusManager } from './status.js';
+
+// Taille maximale de l'image encodée (doit rester sous MAX_HTTP_BUFFER_SIZE côté serveur)
+const MAX_IMAGE_DATA_LENGTH = 5 * 1024 * 1024;
+const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 // Variables globales
 let socket;
-const tooltipsManager = new TooltipsManager();
+// Passe à true quand toutes les couches sont reçues : l'harmonisation est lancée
+// dès que le serveur a fini le traitement de l'image (événement thinking=false).
+let autoHarmonizePending = false;
+// Les couches arrivent compressées : on les décode une par une, dans l'ordre.
+// Le numéro de génération invalide les couches d'une image précédente.
+let layerQueue = Promise.resolve();
+let layerGeneration = 0;
 const paletteManager = new PaletteManager();
 const layerManager = new LayerManager();
 const threeSceneManager = new ThreeSceneManager(paletteManager, layerManager);
-const terminalManager = new TerminalManager(threeSceneManager);
+const statusManager = new StatusManager();
+
+const $ = (id) => document.getElementById(id);
 
 // Initialisation des managers et de la connexion Socket.IO
 threeSceneManager.init();
 initWebFeatures();
-tooltipsManager.init();
 
 // On initialise la connexion Socket.IO
 await fetch('/get_socket_id')
-    .then(response => response.json())
-    .then(data => {
-        let windowName = window.location.href.split('/')[2];
-        if (windowName.includes(':')) {
-            windowName = windowName.split(':')[0];
-        }
+   .then((response) => response.json())
+   .then((data) => {
+      let windowName = window.location.href.split('/')[2];
+      if (windowName.includes(':')) {
+         windowName = windowName.split(':')[0];
+      }
 
-        if (data.socket_id) {
-            socket = io.connect(windowName, {path: '/' + data.socket_id + '/socket.io/'});
-            initSocket();
-        } else {
-            socket = io.connect('http://' + windowName + ':' + data.socket_port, { path: '/socket.io/' });
-            initSocket();
-        }
-    })
-    .catch(error => console.error('Erreur lors de la récupération du port WebSocket:', error));
+      if (data.socket_id) {
+         socket = io.connect(windowName, { path: '/' + data.socket_id + '/socket.io/' });
+         initSocket();
+      } else {
+         socket = io.connect('http://' + windowName + ':' + data.socket_port, {
+            path: '/socket.io/',
+         });
+         initSocket();
+      }
+   })
+   .catch((error) => {
+      console.error('Erreur lors de la récupération du port WebSocket:', error);
+      statusManager.fail('Impossible de joindre le serveur de calcul. Rechargez la page.');
+   });
 
 /**
  * Initialise la connexion Socket.IO et définit les gestionnaires d'événements.
  */
 function initSocket() {
-    let hasConnectedOnce = false;
-    let isThinking = false;
-    let lastHeartbeatAt = Date.now();
-    let heartbeatTimer = null;
+   let hasConnectedOnce = false;
+   let isThinking = false;
+   let lastHeartbeatAt = Date.now();
+   let heartbeatTimer = null;
 
-    const nowTag = () => new Date().toLocaleTimeString('fr-FR', {hour12: false});
-    const transportName = () => socket?.io?.engine?.transport?.name || 'unknown';
+   const nowTag = () => new Date().toLocaleTimeString('fr-FR', { hour12: false });
+   const transportName = () => socket?.io?.engine?.transport?.name || 'unknown';
 
-    const stopClientHeartbeat = () => {
-        if (heartbeatTimer !== null) {
-            clearInterval(heartbeatTimer);
-            heartbeatTimer = null;
-        }
-    };
+   const stopClientHeartbeat = () => {
+      if (heartbeatTimer !== null) {
+         clearInterval(heartbeatTimer);
+         heartbeatTimer = null;
+      }
+   };
 
-    const startClientHeartbeat = () => {
-        stopClientHeartbeat();
-        heartbeatTimer = setInterval(() => {
-            const elapsedSec = Math.floor((Date.now() - lastHeartbeatAt) / 1000);
-            const phase = isThinking ? 'calcul en cours' : 'connexion idle';
-            console.info(`%c[${nowTag()}] heartbeat client%c ${phase} | transport=${transportName()} | +${elapsedSec}s`,
-                'color:#0ea5e9;font-weight:700;',
-                'color:#94a3b8;');
-        }, 15000);
-    };
+   const startClientHeartbeat = () => {
+      stopClientHeartbeat();
+      heartbeatTimer = setInterval(() => {
+         const elapsedSec = Math.floor((Date.now() - lastHeartbeatAt) / 1000);
+         const phase = isThinking ? 'calcul en cours' : 'connexion idle';
+         console.info(
+            `%c[${nowTag()}] heartbeat client%c ${phase} | transport=${transportName()} | +${elapsedSec}s`,
+            'color:#0ea5e9;font-weight:700;',
+            'color:#94a3b8;',
+         );
+      }, 15000);
+   };
 
-    socket.on('connect', () => {
-        console.log('Connecté au serveur via WebSocket');
-        terminalManager.logMessage(`[${nowTag()}] Connexion WebSocket etablie (transport=${transportName()})`, 'important');
-        lastHeartbeatAt = Date.now();
-        startClientHeartbeat();
+   socket.on('connect', () => {
+      console.log('Connecté au serveur via WebSocket');
+      statusManager.log(`Connexion WebSocket établie (transport=${transportName()}).`);
+      lastHeartbeatAt = Date.now();
+      startClientHeartbeat();
 
-        if (hasConnectedOnce) {
-            terminalManager.logMessage(`[${nowTag()}] Connexion retablie. Le traitement serveur continue si la tache est encore active.`, 'important');
-        }
+      if (hasConnectedOnce) statusManager.log('Connexion rétablie.');
+      hasConnectedOnce = true;
+   });
 
-        hasConnectedOnce = true;
-    });
+   socket.on('disconnect', (reason) => {
+      stopClientHeartbeat();
+      statusManager.log(`Connexion perdue : ${reason}`, 'error');
+      // Le serveur répond à l'ancienne session : un traitement en cours ne reviendra pas,
+      // même si l'événement « thinking » n'était pas encore arrivé.
+      if (isThinking || statusManager.isBusy()) {
+         isThinking = false;
+         autoHarmonizePending = false;
+         statusManager.fail(
+            'Connexion au serveur perdue pendant le calcul. Rechargez l’image pour relancer le traitement.',
+         );
+      }
+   });
 
-    socket.on('disconnect', (reason) => {
-        stopClientHeartbeat();
-        terminalManager.logMessage(`[${nowTag()}] Connexion perdue: ${reason}`, 'important');
-    });
+   socket.io.on('reconnect_attempt', (attempt) => {
+      statusManager.log(`Reconnexion en cours (tentative ${attempt})…`);
+   });
 
-    socket.io.on('reconnect_attempt', (attempt) => {
-        terminalManager.logMessage(`[${nowTag()}] Reconnexion en cours (tentative #${attempt})...`, 'important');
-    });
+   socket.io.on('reconnect', (attempt) => {
+      statusManager.log(`Reconnexion réussie après ${attempt} tentative(s).`);
+   });
 
-    socket.io.on('reconnect', (attempt) => {
-        terminalManager.logMessage(`[${nowTag()}] Reconnexion reussie apres ${attempt} tentative(s).`, 'important');
-    });
+   socket.io.on('reconnect_error', (error) => {
+      statusManager.log(`Échec de reconnexion : ${error?.message || error}`, 'error');
+   });
 
-    socket.io.on('reconnect_error', (error) => {
-        terminalManager.logMessage(`[${nowTag()}] Echec de reconnexion: ${error?.message || error}`, 'error');
-    });
+   socket.io.on('error', (error) => {
+      statusManager.log(`Erreur transport Socket.IO : ${error?.message || error}`, 'error');
+   });
 
-    socket.io.on('error', (error) => {
-        terminalManager.logMessage(`[${nowTag()}] Erreur transport Socket.IO: ${error?.message || error}`, 'error');
-    });
+   socket.on('server_response', (msg) => {
+      if (msg.error) {
+         console.error('Erreur reçue du serveur :', msg.error);
+         if (msg.reset === true) {
+            reset();
+            showUploadError(msg.error);
+         }
+         statusManager.fail(msg.error);
+      } else {
+         console.log('Message du serveur :', msg.data);
+         statusManager.log(msg.data);
+      }
+   });
 
-    socket.on('server_response', (msg) => {
-        if (msg.error) {
-            console.error('Erreur reçue du serveur :', msg.error);
-            terminalManager.logMessage('Erreur reçue du serveur : ' + msg.error, 'error');
-            if (msg.reset === true) reset();
-        } else {
-            console.log('Message du serveur :', msg.data);
-        }
-    });
+   socket.on('thinking', (data) => {
+      isThinking = Boolean(data?.thinking);
+      lastHeartbeatAt = Date.now();
 
-    socket.on('thinking', (data) => {
-        isThinking = Boolean(data?.thinking);
-        lastHeartbeatAt = Date.now();
-        if (isThinking) terminalManager.startThinking();
-        else terminalManager.stopThinking();
-    });
+      if (!isThinking && autoHarmonizePending) {
+         autoHarmonizePending = false;
+         requestHarmonization();
+      }
+   });
 
-    socket.on('server_log', (msg) => {
-        if (msg.error) {
-            terminalManager.logMessage('Erreur reçue du serveur : ' + msg.error, 'error');
-        } else {
-            lastHeartbeatAt = Date.now();
-            terminalManager.logMessage(`[${nowTag()}] ${msg.data}`);
-        }
-    });
+   // Toutes les couches sont prêtes : l'image peut être recolorée
+   const onAllLayersReady = (palette) => {
+      $('download-layers').classList.remove('hidden');
+      showResultPane();
+      layerManager.updateSumLayer(palette);
+      threeSceneManager.updatePointCloud();
+      $('stage-hint').classList.remove('hidden');
+      statusManager.complete('layers');
+      $('harmonies-section').classList.remove('hidden');
 
-    socket.on('convex_hull', (data) => {
-        terminalManager.logMessage(`Chargement des sommets de l'enveloppe convexe contenant ${data.vertices.length} sommets...`);
-        threeSceneManager.createConvexHullCircles(data.vertices, data.faces, data.type);
+      // L'harmonisation part dès que le serveur a terminé le traitement. Le décodage
+      // étant asynchrone, le serveur peut avoir déjà fini à ce moment-là.
+      if (isThinking) autoHarmonizePending = true;
+      else requestHarmonization();
+   };
 
-        // On extrait la palette reçue et on crée les éléments HTML
-        paletteManager.create(data.type, data.vertices);
+   socket.on('server_log', (msg) => {
+      if (msg.error) {
+         statusManager.log(msg.error, 'error');
+      } else {
+         lastHeartbeatAt = Date.now();
+         statusManager.log(msg.data);
+      }
+   });
 
-        // Si on a reçu l'enveloppe convexe simplifiée, on affiche le bouton de téléchargement
-        if (data.type === 'simplified') {
-            document.getElementById('download-palettes').classList.remove('hidden');
-        }
-    });
+   socket.on('convex_hull', (data) => {
+      statusManager.log(
+         `Enveloppe convexe ${data.type === 'initial' ? 'complète' : 'simplifiée'} reçue (${data.vertices.length} sommets).`,
+      );
+      threeSceneManager.createConvexHullCircles(data.vertices, data.faces, data.type);
 
-    socket.on('layer_weights', (data) => {
-        // data.width, data.height, data.id, data.weights (rgba array)
-        const simplifiedPalette = paletteManager.getPalette();
-        layerManager.updateLayer(data, simplifiedPalette);
-        threeSceneManager.addLayerWeights(data.weights, data.id);
+      // On extrait la palette reçue et on crée les éléments HTML
+      paletteManager.create(data.type, data.vertices);
 
-        // Si on a reçu toutes les couches, on affiche le bouton de téléchargement
-        if (data.id === simplifiedPalette.length - 1) {
-            document.getElementById('download-layers').classList.remove('hidden');
-            layerManager.updateSumLayer(simplifiedPalette);
-            threeSceneManager.updatePointCloud();
+      // La palette simplifiée termine la première étape
+      if (data.type === 'simplified') {
+         $('download-palettes').classList.remove('hidden');
+         statusManager.complete('palette');
+      }
+   });
 
-            // On avertit l'utilisateur qu'il peut modifier les couleurs de la palette
-            terminalManager.logMessage("💡 Information, vous pouvez modifier les couleurs de la palette en déplaçant les points de l'enveloppe convexe.", 'important');
+   socket.on('layer_weights', (data) => {
+      // data.width, data.height, data.id, data.encoding, data.weights (binaire compressé)
+      const generation = layerGeneration;
+      layerQueue = layerQueue
+         .then(async () => {
+            const weights = await decodeLayerWeights(data);
+            if (generation !== layerGeneration) return; // une autre image a été chargée entre-temps
 
-            // On réactive le bouton d'harmonisation
-            document.getElementById('harmonize').disabled = false;
-        }
-    });
+            const layer = { ...data, weights };
+            const simplifiedPalette = paletteManager.getPalette();
+            layerManager.updateLayer(layer, simplifiedPalette);
+            threeSceneManager.addLayerWeights(weights, data.id);
 
-    socket.on('harmonized', (data) => {
-        // On réactive tous les boutons d'harmonie, on prévient l'utilisateur et on stocke les harmonies
-        document.querySelectorAll('.harmony-button').forEach(button => button.disabled = false);
-
-        // On trouve la palette harmonisée avec la meilleure note (attention data est un dictionnaire)
-        const bestPalette = Object.keys(data).reduce((best, key) => {
-            if (data[key].rate > data[best].rate) {
-                return key;
+            if (data.id === simplifiedPalette.length - 1) onAllLayersReady(simplifiedPalette);
+         })
+         .catch((error) => {
+            console.error('Décodage de couche impossible :', error);
+            if (generation === layerGeneration) {
+               statusManager.fail('Les couches reçues sont illisibles. Rechargez l’image pour relancer le traitement.');
             }
-            return best;
-        });
+         });
+   });
 
-        const names = {
-            "triadic-harmony": "Harmonie triadique",
-            "complementary-harmony": "Harmonie complémentaire",
-            "square-harmony": "Harmonie en carré",
-            "split-harmony": "Harmonie divisée",
-            "double-split-harmony": "Harmonie doublement divisée",
-            "analogous-harmony": "Harmonie analogue",
-            "monochromatic-harmony": "Harmonie monochromatique"
-        }
+   socket.on('harmonized', (data) => {
+      const best = paletteManager.setHarmonies(data);
+      const bestName = $(best)?.querySelector('.harmony-name')?.firstChild?.textContent.trim();
+      statusManager.log(`Palettes harmonisées reçues. Meilleure note : ${bestName || best}.`);
+      statusManager.complete('harmonies');
+   });
 
-        const randomId = Math.floor(Math.random() * 1000000);
-        terminalManager.logMessage("Les palettes harmonisées ont été générées, celle qui a la meilleure note est celle " +
-            "qui suit l'<button id='" + randomId + "' class='terminal-button'>👑 " + names[bestPalette] + "</button>", 'important');
-
-        // On ajoute un listener
-        const button = document.getElementById(randomId);
-        threeSceneManager.addHarmonyButtonListener(button, bestPalette);
-        paletteManager.setHarmonies(data);
-    });
-
-    socket.on('error', (data) => {
-        console.error('Erreur reçue du serveur :', data.message);
-    });
+   socket.on('error', (data) => {
+      console.error('Erreur reçue du serveur :', data.message);
+      statusManager.fail(data.message);
+   });
 }
 
 /**
- * Réinitialise l'affichage des prévisualisations et enlève les éléments 3D précédents.
+ * Décode les poids d'une couche envoyés par le serveur.
+ * Format « uint8-deflate-base64 » : un octet par pixel (poids × 255),
+ * compressé en zlib puis encodé en base64.
+ * @param {{encoding?: string, weights: string|number[]}} data
+ * @returns {Promise<Float32Array>} Poids dans [0, 1].
+ */
+async function decodeLayerWeights(data) {
+   if (data.encoding !== 'uint8-deflate-base64') return Float32Array.from(data.weights);
+
+   // Le navigateur décode le base64 nativement via une URL data:
+   const response = await fetch(`data:application/octet-stream;base64,${data.weights}`);
+   const stream = response.body.pipeThrough(new DecompressionStream('deflate'));
+   const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+   const weights = new Float32Array(bytes.length);
+   for (let i = 0; i < bytes.length; i++) weights[i] = bytes[i] / 255;
+   return weights;
+}
+
+/**
+ * Demande au serveur les palettes harmonisées à partir de la palette simplifiée d'origine.
+ */
+function requestHarmonization() {
+   const simplifiedPalette = paletteManager.getOriginalSimplified();
+   socket.emit('harmonize', { palette: simplifiedPalette });
+   console.log("Demande d'harmonisation de la palette au serveur...");
+   statusManager.log('Calcul des palettes harmonisées…');
+}
+
+/**
+ * Revient à l'état « aucune image » : vide les panneaux et la scène 3D.
  */
 function reset() {
-    // On vide les conteneurs HTML
-    const idsToEmpty = ["initial-palette", "selected-palette", "layers-container"];
-    const doNotRemoveLast = ["layers-container"];
-    idsToEmpty.forEach(id => {
-        const container = document.getElementById(id);
-        if (container && !doNotRemoveLast.includes(id)) container.innerHTML = '';
-        else if (container && doNotRemoveLast.includes(id)) {
-            while (container.childElementCount > 1) {
-                container.removeChild(container.firstElementChild);
-            }
-        }
-    });
+   [
+      'palette-section',
+      'harmonies-section',
+      'layers-section',
+      'previews-container',
+      'stage-hint',
+      'download-palettes',
+      'change-image',
+   ].forEach((id) => $(id).classList.add('hidden'));
+   $('drag-area').classList.remove('hidden');
+   $('original-image').src = '';
+   $('compare-image').src = '';
+   $('result-pane').classList.add('hidden');
+   $('stage').classList.remove('has-result');
 
-    // On cache les éléments HTML
-    const idsToHide = [
-        "previews-title", "previews-container", "original-image", "harmonized-image",
-        "palettes-title", "initial-palette", "selected-palette", "download-palettes",
-        "layers-title", "layers-container", "download-layers", "rollback-palette"
-    ];
-    idsToHide.forEach(id => {
-        const element = document.getElementById(id);
-        if (element && !element.classList.contains('hidden')) element.classList.add('hidden');
-    });
+   autoHarmonizePending = false;
+   layerGeneration++;
+   threeSceneManager.reset();
+   paletteManager.reset();
+   layerManager.reset();
+}
 
-    // On réinitialise l'image originale
-    const originalImage = document.getElementById('original-image');
-    originalImage.src = '';
+/**
+ * Affiche le résultat à côté du cube (le rendu 3D se redimensionne tout seul).
+ */
+function showResultPane() {
+   $('stage').classList.add('has-result');
+   $('result-pane').classList.remove('hidden');
+}
 
-    // On désactive les boutons d'harmonie
-    document.querySelectorAll('.harmony-button').forEach(button => button.disabled = true);
-    document.getElementById('harmonize').disabled = true;
+/**
+ * Bouton « Maintenir pour comparer » : l'originale recouvre le résultat
+ * tant que le bouton est enfoncé (souris, toucher ou clavier).
+ */
+function initCompareButton() {
+   const button = $('compare-original');
+   const original = $('compare-image');
+   const show = (visible) => {
+      original.classList.toggle('hidden', !visible);
+      button.setAttribute('aria-pressed', String(visible));
+   };
 
-    terminalManager.stopThinking();
-    threeSceneManager.reset();
-    paletteManager.reset();
-    layerManager.reset();
+   button.addEventListener('pointerdown', (e) => {
+      button.setPointerCapture(e.pointerId);
+      show(true);
+   });
+   ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((type) =>
+      button.addEventListener(type, () => show(false)),
+   );
+   button.addEventListener('keydown', (e) => {
+      if (e.key === ' ' || e.key === 'Enter') {
+         e.preventDefault();
+         show(true);
+      }
+   });
+   button.addEventListener('keyup', () => show(false));
+   button.addEventListener('blur', () => show(false));
+}
+
+/**
+ * Affiche (ou efface) une erreur de sélection de fichier sous la zone de dépôt.
+ * @param {string} [message]
+ */
+function showUploadError(message = '') {
+   $('upload-error').textContent = message;
+   $('upload-error').classList.toggle('hidden', !message);
 }
 
 /**
@@ -245,111 +332,92 @@ function reset() {
  * @param {File} file - Fichier image à uploader.
  */
 function onImageUpload(file) {
-    const originalImage = document.getElementById('original-image');
+   const originalImage = $('original-image');
+   showUploadError();
 
-    if (!file) {
-        console.error('Aucun fichier sélectionné');
-        return;
-    }
+   if (!file) return;
 
-    // On réinitialise le contexte 3D et les prévisualisations
-    reset();
+   if (!ACCEPTED_TYPES.includes(file.type)) {
+      showUploadError(
+         'Ce fichier n’est pas pris en charge. Choisissez une image JPG, PNG ou WebP.',
+      );
+      return;
+   }
 
-    // On vérifie que le fichier est bien une image (au cas où ?)
-    if (!file.type.startsWith('image/')) {
-        console.error('Le fichier n\'est pas une image');
-        terminalManager.logMessage('Le fichier n\'est pas une image', 'error');
-        return;
-    }
+   const reader = new FileReader();
+   reader.onload = (event) => {
+      if (event.target.result.length > MAX_IMAGE_DATA_LENGTH) {
+         showUploadError('Cette image dépasse 5 Mo. Choisissez une image plus légère.');
+         return;
+      }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-        // On vérifie que la taille de l'image est inférieure à 5 Mo
-        if (event.target.result.length > 5 * 1024 * 1024) {
-            console.error('L\'image est trop grande (5 Mo max)');
-            terminalManager.logMessage('L\'image est trop grande (5 Mo max)', 'error');
-            return;
-        }
+      const img = new Image();
+      img.onload = () => {
+         // On repart de zéro seulement une fois la nouvelle image validée
+         reset();
+         $('drag-area').classList.add('hidden');
+         $('change-image').classList.remove('hidden');
+         $('previews-container').classList.remove('hidden');
+         $('compare-image').src = event.target.result;
 
-        const img = new Image();
-        img.onload = () => {
-            // On affiche le titre et le conteneur de prévisualisation
-            originalImage.classList.remove('hidden');
-            document.getElementById("previews-title").classList.remove('hidden');
-            document.getElementById("previews-container").classList.remove('hidden');
+         originalImage.onload = () => {
+            threeSceneManager.recreateFromOriginal();
+         };
+         originalImage.src = event.target.result;
 
-            originalImage.src = event.target.result;
-
-            // On envoie l'image encodée en base64 au serveur via Socket.IO
-            socket.emit('upload_image', {image_data: event.target.result});
-            console.log("Envoi de l'image au serveur, en attente de l'enveloppe convexe...");
-            terminalManager.logMessage("Envoi de l'image au serveur, en attente de l'enveloppe convexe...");
-
-            originalImage.onload = () => {
-                threeSceneManager.recreateFromOriginal();
-            }
-        };
-        img.src = event.target.result;
-    };
-    reader.readAsDataURL(file);
+         // On envoie l'image encodée en base64 au serveur via Socket.IO
+         statusManager.begin();
+         statusManager.log(
+            `Envoi de l’image (${img.naturalWidth}×${img.naturalHeight}) au serveur…`,
+         );
+         socket.emit('upload_image', { image_data: event.target.result });
+      };
+      img.onerror = () =>
+         showUploadError('Cette image n’a pas pu être lue. Essayez un autre fichier.');
+      img.src = event.target.result;
+   };
+   reader.readAsDataURL(file);
 }
 
 /**
- * Initialise les fonctionnalités web (drag & drop, input file).
+ * Initialise les fonctionnalités web (dépôt de fichier, sélection, raccourcis).
  */
 function initWebFeatures() {
-    terminalManager.logMessage("👋 Bienvenue sur IlFautQueJeTrouveUnNom !", 'important');
+   const input = $('upload');
+   const area = $('drag-area');
+   const openPicker = () => input.click();
 
-    // J'ai l'impression que le navigateur garde en cache les 'disabled' des boutons (dans le doute)
-    document.querySelectorAll('.harmony-button').forEach(button => button.disabled = true);
-    document.getElementById('harmonize').disabled = true;
+   area.addEventListener('click', openPicker);
+   area.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+         e.preventDefault();
+         openPicker();
+      }
+   });
+   $('change-image').addEventListener('click', openPicker);
+   initCompareButton();
 
-    const input = document.getElementById('upload');
-    const area = document.getElementById('drag-area');
-    const harmonizeButton = document.getElementById('harmonize');
+   input.addEventListener('change', (e) => {
+      onImageUpload(e.target.files[0]);
+      input.value = ''; // permet de choisir à nouveau le même fichier
+   });
 
-    /* ---------- Événements de la zone de drag & drop et de l'input ---------- */
-    area.addEventListener('click', () => input.click());
-
-    area.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        area.classList.add('dragover');
-    });
-
-    area.addEventListener('dragleave', () => {
-        area.classList.remove('dragover');
-    });
-
-    area.addEventListener('drop', (e) => {
-        e.preventDefault();
-        area.classList.remove('dragover');
-        const file = e.dataTransfer.files[0];
-        onImageUpload(file);
-    });
-
-    input.addEventListener('change', (e) => {
-        e.preventDefault()
-        const file = e.target.files[0];
-        onImageUpload(file);
-    });
-
-    document.getElementById("previews-container").addEventListener('click', (e) => {
-        // Si on clique sur une image, on propose de la télécharger (en full size)
-        if (e.target.tagName === 'IMG') {
-            const a = document.createElement('a');
-            a.href = e.target.src;
-            a.download = new Date().toISOString() + '.png';
-            a.click();
-
-            e.preventDefault(); // On empêche le navigateur de suivre le lien
-            a.remove(); // On supprime le lien après le téléchargement
-        }
-    });
-
-    harmonizeButton.addEventListener('click', () => {
-        const simplifiedPalette = paletteManager.getOriginalSimplified();
-        socket.emit('harmonize', {palette: simplifiedPalette});
-        console.log("Demande d'harmonisation de la palette au serveur...");
-        terminalManager.logMessage("Demande d'harmonisation de la palette au serveur...");
-    });
+   // L'image peut être déposée n'importe où sur la page
+   let dragDepth = 0;
+   document.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      dragDepth++;
+      area.classList.add('dragover');
+   });
+   document.addEventListener('dragover', (e) => e.preventDefault());
+   document.addEventListener('dragleave', () => {
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) area.classList.remove('dragover');
+   });
+   document.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dragDepth = 0;
+      area.classList.remove('dragover');
+      onImageUpload(e.dataTransfer.files[0]);
+   });
 }

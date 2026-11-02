@@ -1,0 +1,172 @@
+/*
+ * Socle commun à toutes les pages : police, couleurs et comportements de base.
+ * Règle d'identité : les seules couleurs à l'écran viennent des images, des
+ * palettes et de l'espace RGB. L'interface elle-même reste en niveaux de gris.
+ */
+
+@font-face {
+   font-family: 'Instrument Sans';
+   src: url(../fonts/InstrumentSans-Variable.woff2) format('woff2');
+   font-weight: 400 700;
+   font-stretch: 75% 100%;
+   font-style: normal;
+   font-display: swap;
+}
+
+@font-face {
+   font-family: 'Instrument Sans';
+   src: url(../fonts/InstrumentSans-Italic-Variable.woff2) format('woff2');
+   font-weight: 400 700;
+   font-style: italic;
+   font-display: swap;
+}
+
+:root {
+   color-scheme: dark;
+
+   --black: #000000;
+   --text: #f2f2f2;
+   --text-muted: #9a9a9a;
+   --text-faint: #5e5e5e;
+   --line: #262626;
+   --line-strong: #3a3a3a;
+   --error: #ff7a7a;
+
+   --font: 'Instrument Sans', system-ui, sans-serif;
+   --ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+*,
+*::before,
+*::after {
+   box-sizing: border-box;
+}
+
+body {
+   margin: 0;
+   background-color: var(--black);
+   color: var(--text);
+   font-family: var(--font);
+   -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+   background: var(--text);
+   color: var(--black);
+}
+
+:where(a, button, [tabindex]):focus-visible {
+   outline: 2px solid var(--text);
+   outline-offset: 3px;
+   border-radius: 2px;
+}
+
+button {
+   font: inherit;
+   color: inherit;
+}
+
+.hidden {
+   display: none !important;
+}
+
+/* Barre du haut, commune à l'app et à la page d'évaluation. */
+
+.topbar {
+   height: var(--topbar-height, 56px);
+   flex-shrink: 0;
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 16px;
+   padding: 0 var(--topbar-pad, 24px);
+   border-bottom: 1px solid var(--line);
+}
+
+.brand {
+   white-space: nowrap;
+   color: var(--text);
+   font-size: 1.0625rem;
+   font-weight: 500;
+   font-stretch: 90%;
+   letter-spacing: -0.01em;
+   text-decoration: none;
+}
+
+.topbar-links {
+   display: flex;
+   gap: 24px;
+}
+
+.topbar-links a {
+   color: var(--text-muted);
+   font-size: 0.9375rem;
+   text-decoration: none;
+   transition: color 0.2s var(--ease);
+}
+
+.topbar-links a:hover {
+   color: var(--text);
+}
+
+/* Bouton principal : plein, blanc, angles presque droits (comme un pixel). */
+.button {
+   display: inline-block;
+   padding: 0.875rem 1.5rem;
+   border: none;
+   background-color: var(--text);
+   color: var(--black);
+   font-size: 1rem;
+   font-weight: 500;
+   line-height: 1;
+   text-decoration: none;
+   border-radius: 2px;
+   cursor: pointer;
+   transition: background-color 0.2s var(--ease);
+}
+
+.button:hover {
+   background-color: #ffffff;
+}
+
+/* Action secondaire : texte souligné d'un filet. */
+.text-button {
+   padding: 0;
+   border: none;
+   background: none;
+   color: var(--text-muted);
+   font-size: 0.875rem;
+   text-decoration: underline;
+   text-decoration-color: var(--line-strong);
+   text-decoration-thickness: 1px;
+   text-underline-offset: 0.3em;
+   cursor: pointer;
+   transition:
+      color 0.2s var(--ease),
+      text-decoration-color 0.2s var(--ease);
+}
+
+.text-button:hover {
+   color: var(--text);
+   text-decoration-color: var(--text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+   *,
+   *::before,
+   *::after {
+      transition: none !important;
+      animation: none !important;
+   }
+}
+
+@media (max-width: 480px) {
+   .topbar-links {
+      gap: 16px;
+   }
+
+   /* Sur petit écran, on ne garde que « À propos » (qui mène aussi à l'app). */
+   .topbar-links a:not(:last-child) {
+      display: none;
+   }
+}

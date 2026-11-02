@@ -1,155 +1,230 @@
-// On charge les IDs des images depuis le serveur
-let ids = [];
-fetch("/img_ids")
-    .then(response => response.json())
-    .then(data => {
-        ids = data;
-        loadNewImages();
-    })
-    .catch(error => console.error('Erreur lors du chargement des IDs:', error));
+// Images de l'étude : l'originale et ses versions harmonisées, hébergées à part
+const IMAGES_BASE_URL = 'https://donovann.dev/form/harmony';
 
-// Liste des types d'harmonie disponibles
+// Liste des types d'harmonie proposés (« original » = image non modifiée)
 const harmonies = [
-    "original",
-    "monochromatic",
-    "analogous",
-    "complementary",
-    "triadic",
-    "square",
-    "triadic",
-    "split",
-    "double-split"
+   'original',
+   'monochromatic',
+   'analogous',
+   'complementary',
+   'triadic',
+   'square',
+   'triadic',
+   'split',
+   'double-split',
 ];
 
-// Fonction qui retourne un élément aléatoire dans un tableau
+const MAX_LOAD_ATTEMPTS = 3;
+// Durée minimale de lecture de l'introduction avant de pouvoir commencer
+const INTRO_DELAY_SECONDS = 6;
+const INTRO_SEEN_KEY = 'harmony-feedback-intro-seen';
+
+const pair = document.getElementById('pair');
+const buttons = [document.getElementById('choice-a'), document.getElementById('choice-b')];
+const images = [document.getElementById('img1'), document.getElementById('img2')];
+const status = document.getElementById('survey-status');
+const survey = document.querySelector('.survey');
+const intro = document.getElementById('intro');
+const test = document.getElementById('test');
+const startButton = document.getElementById('start-survey');
+
+let ids = [];
+// Paire actuellement affichée : c'est elle, et elle seule, qui reçoit le vote
+let currentRound = null;
+let answers = 0;
+// Dimensions naturelles des deux images affichées
+let naturalSizes = null;
+
 function getRandomElement(arr) {
-    return arr[Math.floor(Math.random() * arr.length)];
+   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// Fonction qui retourne deux éléments distincts dans un tableau
 function getTwoDistinctElements(arr) {
-    let first = getRandomElement(arr);
-    let second = getRandomElement(arr);
-    while (second === first) {
-        second = getRandomElement(arr);
-    }
-    return [first, second];
+   const first = getRandomElement(arr);
+   let second = getRandomElement(arr);
+   while (second === first) second = getRandomElement(arr);
+   return [first, second];
 }
 
-// Objet pour stocker les informations de la comparaison en cours
-let currentRound = {};
-
-// Charge une nouvelle paire d'images
-function loadNewImages() {
-    const id = getRandomElement(ids);
-    const [harmony1, harmony2] = getTwoDistinctElements(harmonies);
-
-    // Enregistrement du round courant
-    currentRound = {id, harmony1, harmony2};
-
-    // Construction des URLs pour les images harmonisées
-    const url1 = harmony1 === "original" ?
-        `https://jhune.dev/form/harmony/${id}/${id}.png` :
-        `https://jhune.dev/form/harmony/${id}/harmonies/${id}_${harmony1}-harmony_recon.png`;
-    const url2 = harmony2 === "original" ?
-        `https://jhune.dev/form/harmony/${id}/${id}.png` :
-        `https://jhune.dev/form/harmony/${id}/harmonies/${id}_${harmony2}-harmony_recon.png`;
-
-    // Création des objets Image pour préchargement
-    const img1Preload = new Image();
-    const img2Preload = new Image();
-
-    let imagesLoaded = 0;
-
-    function onImageLoad() {
-        imagesLoaded++;
-        if (imagesLoaded === 2) {
-            // Les deux images sont chargées, on les affiche
-            document.getElementById('img1').src = url1;
-            document.getElementById('img2').src = url2;
-
-            if (img2Preload.naturalWidth / img2Preload.naturalHeight >= 1.5) {
-                document.getElementById('image-container').classList.add("column");
-            } else {
-                document.getElementById('image-container').classList.remove("column");
-            }
-        }
-    }
-
-    // Assignation des événements de chargement
-    img1Preload.onload = onImageLoad;
-    img2Preload.onload = onImageLoad;
-
-    // Déclenchement du chargement des images
-    img1Preload.src = url1;
-    img2Preload.src = url2;
+function imageUrl(id, harmony) {
+   return harmony === 'original'
+      ? `${IMAGES_BASE_URL}/${id}/${id}.png`
+      : `${IMAGES_BASE_URL}/${id}/harmonies/${id}_${harmony}-harmony_recon.png`;
 }
 
-let inEvents = ["mouseover"];
-inEvents.forEach(event => {
-    document.getElementById('img1').addEventListener(event, function () {
-        document.getElementById('img2').classList.add("dimmed");
-    });
+function preload(url) {
+   return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`Image introuvable : ${url}`));
+      img.src = url;
+   });
+}
 
-    document.getElementById('img2').addEventListener(event, function () {
-        document.getElementById('img1').classList.add("dimmed");
-    });
-})
+function setStatus(message, { error = false, pending = false } = {}) {
+   status.textContent = message;
+   status.classList.toggle('is-error', error);
+   status.classList.toggle('is-pending', pending);
+}
 
-let outEvents = ["mouseout"];
-outEvents.forEach(event => {
-    document.getElementById('img1').addEventListener(event, function () {
-        document.getElementById('img2').classList.remove("dimmed");
-    });
+/** Espace disponible pour la paire, sous le titre, sans faire défiler la page. */
+function availableArea() {
+   const style = getComputedStyle(survey);
+   const width = survey.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+   const top = test.getBoundingClientRect().top + window.scrollY;
+   const gap = parseFloat(getComputedStyle(test).rowGap) || 0;
+   const statusHeight = status.offsetHeight || 20;
+   const height = window.innerHeight - top - gap - statusHeight - parseFloat(style.paddingBottom);
+   return { width, height: Math.max(height, 180) };
+}
 
-    document.getElementById('img2').addEventListener(event, function () {
-        document.getElementById('img1').classList.remove("dimmed");
-    });
-})
+/**
+ * Choisit entre « côte à côte » et « empilées » la disposition qui affiche les
+ * images le plus grand, puis fixe leur taille (sans jamais les agrandir).
+ */
+function layoutPair() {
+   if (!naturalSizes || test.classList.contains('hidden')) return;
+   const { width, height } = availableArea();
+   const gap = parseFloat(getComputedStyle(pair).columnGap) || 0;
 
-// Gestion des clics sur les images
-document.getElementById('img1').addEventListener('click', function () {
-    fetch("/form/feedback", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            id: currentRound.id,
-            harmonyChosen: currentRound.harmony1,
-            harmonyOption1: currentRound.harmony1,
-            harmonyOption2: currentRound.harmony2
-        })
-    }).then(r => {
-        if (!r.ok) {
-            console.error("Erreur lors de l'envoi du feedback :", r.statusText);
-        }
-    })
+   const scaleFor = (boxWidth, boxHeight) =>
+      Math.min(...naturalSizes.map(([w, h]) => Math.min(boxWidth / w, boxHeight / h, 1)));
+   const sideBySide = scaleFor((width - gap) / 2, height);
+   const stacked = scaleFor(width, (height - gap) / 2);
+   const scale = Math.max(sideBySide, stacked);
 
-    document.getElementById('img1').classList.remove("dimmed");
-    document.getElementById('img2').classList.remove("dimmed");
-    loadNewImages();
+   pair.classList.toggle('is-stacked', stacked > sideBySide);
+   images.forEach((img, i) => {
+      const [w, h] = naturalSizes[i];
+      img.style.width = `${Math.floor(w * scale)}px`;
+      img.style.height = `${Math.floor(h * scale)}px`;
+   });
+}
+
+/** Désactive l'effet de survol jusqu'au prochain mouvement réel de la souris. */
+function awaitPointerMove() {
+   pair.classList.add('awaiting-pointer');
+   window.addEventListener('pointermove', () => pair.classList.remove('awaiting-pointer'), { once: true });
+}
+
+let resizeFrame = 0;
+window.addEventListener('resize', () => {
+   cancelAnimationFrame(resizeFrame);
+   resizeFrame = requestAnimationFrame(layoutPair);
 });
 
-document.getElementById('img2').addEventListener('click', function () {
-    fetch("/form/feedback", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            id: currentRound.id,
-            harmonyChosen: currentRound.harmony2,
-            harmonyOption1: currentRound.harmony1,
-            harmonyOption2: currentRound.harmony2
-        })
-    }).then(r => {
-        if (!r.ok) {
-            console.error("Erreur lors de l'envoi du feedback :", r.statusText);
-        }
-    })
+function setLoading(loading) {
+   pair.classList.toggle('is-loading', loading);
+   pair.setAttribute('aria-busy', String(loading));
+   buttons.forEach((button) => (button.disabled = loading));
+}
 
-    document.getElementById('img1').classList.remove("dimmed");
-    document.getElementById('img2').classList.remove("dimmed");
-    loadNewImages();
+function answersMessage() {
+   if (answers === 0) return '';
+   return answers === 1 ? 'Merci, 1 réponse enregistrée.' : `Merci, ${answers} réponses enregistrées.`;
+}
+
+/**
+ * Charge une nouvelle paire et ne l'affiche (et ne la rend votable)
+ * qu'une fois les deux images prêtes.
+ */
+async function loadNewImages(attempt = 1) {
+   setLoading(true);
+
+   const id = getRandomElement(ids);
+   const [harmony1, harmony2] = getTwoDistinctElements(harmonies);
+   const urls = [imageUrl(id, harmony1), imageUrl(id, harmony2)];
+
+   try {
+      const loaded = await Promise.all(urls.map(preload));
+      naturalSizes = loaded.map((img) => [img.naturalWidth, img.naturalHeight]);
+      images[0].src = urls[0];
+      images[1].src = urls[1];
+      pair.classList.remove('is-empty');
+      layoutPair();
+      awaitPointerMove();
+
+      currentRound = { id, harmony1, harmony2 };
+      setLoading(false);
+      if (!status.classList.contains('is-error')) setStatus(answersMessage());
+   } catch (error) {
+      console.error(error);
+      if (attempt < MAX_LOAD_ATTEMPTS) return loadNewImages(attempt + 1);
+      setStatus('Les images n’ont pas pu être chargées. Rechargez la page pour réessayer.', { error: true });
+   }
+}
+
+async function sendFeedback(round, harmonyChosen) {
+   try {
+      const response = await fetch('/form/feedback', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({
+            id: round.id,
+            harmonyChosen,
+            harmonyOption1: round.harmony1,
+            harmonyOption2: round.harmony2,
+         }),
+      });
+      if (!response.ok) throw new Error(response.statusText);
+      answers++;
+      setStatus(answersMessage());
+   } catch (error) {
+      console.error("Erreur lors de l'envoi du feedback :", error);
+      setStatus('Votre dernier choix n’a pas pu être enregistré. Vous pouvez continuer.', { error: true });
+   }
+}
+
+buttons.forEach((button, index) => {
+   button.addEventListener('click', () => {
+      if (!currentRound || pair.classList.contains('is-loading')) return;
+
+      const round = currentRound;
+      currentRound = null; // un seul vote par paire
+      sendFeedback(round, index === 0 ? round.harmony1 : round.harmony2);
+      setStatus(answersMessage());
+      loadNewImages();
+   });
 });
+
+/* ---------- Introduction ---------- */
+
+function startSurvey() {
+   intro.classList.add('hidden');
+   test.classList.remove('hidden');
+   sessionStorage.setItem(INTRO_SEEN_KEY, '1');
+   layoutPair(); // la première paire a pu se charger pendant la lecture
+   awaitPointerMove();
+   // Pas de focus automatique : il assombrirait une des deux images et biaiserait le choix
+}
+
+startButton.addEventListener('click', startSurvey);
+
+if (sessionStorage.getItem(INTRO_SEEN_KEY)) {
+   // Déjà lue pendant cette session (rechargement de la page) : on passe directement au test
+   startSurvey();
+} else {
+   let remaining = INTRO_DELAY_SECONDS;
+   const countdown = setInterval(() => {
+      remaining--;
+      if (remaining > 0) {
+         startButton.textContent = `Commencer dans ${remaining}\u00a0s`;
+         return;
+      }
+      clearInterval(countdown);
+      startButton.textContent = 'Commencer l’évaluation';
+      startButton.disabled = false;
+   }, 1000);
+}
+
+// On charge les IDs des images depuis le serveur (dès l'introduction, pour ne pas attendre ensuite)
+fetch('/img_ids')
+   .then((response) => response.json())
+   .then((data) => {
+      ids = data;
+      loadNewImages();
+   })
+   .catch((error) => {
+      console.error('Erreur lors du chargement des IDs:', error);
+      setStatus('La liste des images n’a pas pu être chargée. Rechargez la page pour réessayer.', { error: true });
+   });

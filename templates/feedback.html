@@ -13,36 +13,52 @@
     <link rel="manifest" href="../static/favicons/site.webmanifest">
 
     <title>Harmonisation d'images - Évaluation</title>
+    <link rel="stylesheet" href="../static/css/base.css">
     <link rel="stylesheet" href="../static/css/feedback.css">
 </head>
 <body>
-<div class="navbar-container">
-    <div class="navbar">
-        <div class="navbar-left">
-            <div class="logo-container">
-                <a href="/" class="logo">
-                    <img src="../static/img/logo.webp" alt="Logo">
-                </a>
-                <a href="/" class="logo-text">Harmonisation d'images</a>
-            </div>
+<header class="topbar">
+    <a href="/" class="brand">Harmonisation d’images</a>
+    <nav class="topbar-links" aria-label="Navigation principale">
+        <a href="/app">Harmoniser une image</a>
+        <a href="/">À propos</a>
+    </nav>
+</header>
+
+<main class="survey">
+    <!-- Introduction : lue avant le test -->
+    <section class="intro" id="intro" aria-labelledby="intro-title">
+        <h1 id="intro-title">Aidez-nous à évaluer les harmonies de couleurs</h1>
+        <p class="intro-lede">
+            Vous allez voir deux versions d’une même image, côte à côte. Selon les paires,
+            il s’agit de l’image d’origine et d’une version recolorée, ou de deux recolorations différentes.
+        </p>
+
+        <h2>Comment choisir</h2>
+        <ul class="intro-rules">
+            <li>Cliquez sur l’image dont les couleurs vous plaisent le plus. Fiez-vous à votre première impression.</li>
+            <li>Il n’y a pas de bonne réponse&nbsp;: c’est votre préférence qui compte, pas de retrouver l’original.</li>
+            <li>Une nouvelle paire s’affiche après chaque choix. Arrêtez quand vous voulez&nbsp;: chaque réponse est enregistrée.</li>
+        </ul>
+
+        <button type="button" class="button" id="start-survey" disabled>Commencer dans 6&nbsp;s</button>
+    </section>
+
+    <!-- Test : uniquement les images -->
+    <section class="test hidden" id="test" aria-label="Comparaison d’images">
+        <div class="pair is-empty is-loading" id="pair" aria-busy="true">
+            <button type="button" class="choice" id="choice-a" aria-label="Choisir la proposition A" disabled>
+                <img id="img1" alt="Proposition A" draggable="false">
+            </button>
+            <button type="button" class="choice" id="choice-b" aria-label="Choisir la proposition B" disabled>
+                <img id="img2" alt="Proposition B" draggable="false">
+            </button>
         </div>
-        <div class="navbar-right">
-            <a href="/app">Harmoniser une image</a>
-            <a href="/">À propos</a>
-        </div>
-        <div class="mobile-navbar-right">
-            <a href="/app">Application</a>
-            <a href="/">À propos</a>
-        </div>
-    </div>
-</div>
-<div class="container">
-    <h1>Choisissez l'image que vous préférez</h1>
-    <div id="image-container" class="image-container" >
-        <img draggable="false" id="img1" src="../static/img/placeholder.webp" alt="Option 1">
-        <img draggable="false" id="img2" src="../static/img/placeholder.webp" alt="Option 2">
-    </div>
-</div>
+
+        <p class="survey-status is-pending" id="survey-status" role="status" aria-live="polite">Chargement des images…</p>
+    </section>
+</main>
+
 <script type="module" src="../static/js/feedback.js" defer></script>
 </body>
 </html>
