@@ -14,7 +14,8 @@ class JobQueue:
     `acquire(key)` attend qu'une place se libère (ou lève QueueFullError si trop
     de personnes attendent déjà) ; `release()` libère la place, qui passe
     directement au premier en attente. `on_position(key, position)` est appelé
-    à chaque changement de position (1 = prochain servi).
+    à chaque changement de position (1 = prochain servi). Pour quitter la file,
+    on annule la tâche qui attend dans `acquire`.
     """
 
     def __init__(self, slots, max_waiting, on_position=None):
@@ -42,7 +43,7 @@ class JobQueue:
         try:
             await future
         except asyncio.CancelledError:
-            # Abandon pendant l'attente (déconnexion) : on quitte la file.
+            # Abandon pendant l'attente (image remplacée, déconnexion) : on quitte la file.
             if self._waiting.pop(key, None) is not None:
                 await self._notify_positions()
             elif future.done() and not future.cancelled():
@@ -58,12 +59,6 @@ class JobQueue:
                 asyncio.get_running_loop().create_task(self._notify_positions())
                 return
         self.running = max(0, self.running - 1)
-
-    def cancel(self, key):
-        """Retire `key` de la file d'attente (sans effet s'il n'y est pas)."""
-        future = self._waiting.get(key)
-        if future is not None and not future.done():
-            future.cancel()
 
     async def _notify_positions(self):
         if self.on_position is None:

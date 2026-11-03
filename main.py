@@ -3,8 +3,9 @@ Serveur Harmony : une seule application, sur un seul port.
 
 - Flask sert les pages, les fichiers statiques et l'API du formulaire d'évaluation.
 - Socket.IO (même port, chemin /socket.io/) reçoit les images et renvoie l'avancement.
-- Les calculs tournent dans un pool de processus borné ; au-delà, les demandes
-  attendent dans une file (position et attente estimée envoyées au navigateur).
+- Chaque calcul tourne dans son propre processus, en nombre borné ; au-delà, les
+  demandes attendent dans une file (position et attente estimée envoyées au navigateur).
+  Un calcul est arrêté dès que son image est remplacée ou que le client se déconnecte.
 """
 import asyncio
 import base64
@@ -22,8 +23,7 @@ import time
 import uuid
 import warnings
 from collections import deque
-from concurrent.futures import ProcessPoolExecutor
-from concurrent.futures.process import BrokenProcessPool
+from dataclasses import dataclass
 
 import socketio
 import uvicorn
@@ -164,12 +164,37 @@ def create_web_app():
 
 
 # --------------------------------------------------------------------------
-# Traitement des images (Socket.IO + file d'attente + pool de calcul)
+# Traitement des images (Socket.IO + file d'attente + un processus par calcul)
 # --------------------------------------------------------------------------
+#
+# Politique : un seul traitement par connexion, et rien ne survit à la connexion.
+# - Un nouvel envoi interrompt le traitement en cours de la même connexion.
+# - Une déconnexion (page rechargée ou fermée, réseau coupé) l'annule aussi :
+#   le calcul est arrêté et sa place rendue à la file. Après une coupure réseau,
+#   le navigateur renvoie lui-même l'image une fois reconnecté.
+# Chaque événement porte l'identifiant `job` donné par le navigateur à l'envoi,
+# qui ignore ainsi ceux d'une image remplacée entre-temps.
 
-def _new_compute_pool(context):
-    """Pool de processus de calcul ; chaque processus est recyclé régulièrement pour rendre la mémoire."""
-    return ProcessPoolExecutor(max_workers=MAX_CONCURRENT_JOBS, mp_context=context, max_tasks_per_child=10)
+
+@dataclass(eq=False)
+class ImageJob:
+    """Traitement d'une image pour une connexion (comparé par identité : clé de la file)."""
+    sid: str
+    id: str | None
+    task: asyncio.Task
+
+
+def _job_id(payload):
+    """Identifiant de traitement envoyé par le navigateur (None s'il est absent ou invalide)."""
+    job_id = payload.get("job")
+    return job_id if isinstance(job_id, str) and 0 < len(job_id) <= 64 else None
+
+
+def _stop_process(process):
+    """Arrête un processus de calcul (sans effet s'il a déjà fini) et attend sa fin."""
+    if process.is_alive():
+        process.kill()  # rien à sauvegarder : arrêt immédiat, quels que soient ses signaux
+    process.join()
 
 
 def create_socket_server(context):
@@ -184,8 +209,8 @@ def create_socket_server(context):
     )
 
     manager = context.Manager()
-    pool = _new_compute_pool(context)
     connected = set()
+    active = {}  # sid -> ImageJob en cours (au plus un par connexion)
     recent_durations = deque(maxlen=10)  # durée des derniers calculs, pour estimer l'attente
 
     def estimated_wait(position):
@@ -196,15 +221,18 @@ def create_socket_server(context):
             return None
         return round(position * sum(recent_durations) / len(recent_durations))
 
-    async def send_queue_position(sid, position):
-        await sio.emit("queue", {"position": position, "eta": estimated_wait(position) if position else None}, to=sid)
+    async def emit_job(job, event, payload):
+        await sio.emit(event, {**payload, "job": job.id}, to=job.sid)
+
+    async def send_queue_position(job, position):
+        await emit_job(job, "queue", {"position": position, "eta": estimated_wait(position) if position else None})
 
     jobs = JobQueue(MAX_CONCURRENT_JOBS, MAX_QUEUE_LENGTH, on_position=send_queue_position)
 
-    async def reject(sid, message):
+    async def reject(job, message):
         """Refuse un envoi : message affiché sous la zone de dépôt, interface réinitialisée."""
-        await sio.emit("server_response", {"error": message, "reset": True}, to=sid)
-        await sio.emit("thinking", {"thinking": False}, to=sid)
+        await emit_job(job, "server_response", {"error": message, "reset": True})
+        await emit_job(job, "thinking", {"thinking": False})
 
     @sio.event
     async def connect(sid, environ, auth):
@@ -213,98 +241,123 @@ def create_socket_server(context):
         await sio.emit("server_response", {"data": "Connexion au moteur de calcul établie."}, to=sid)
 
     @sio.event
-    async def disconnect(sid):
+    async def disconnect(sid, *_):
         connected.discard(sid)
-        jobs.cancel(sid)
-        logging.info("Client déconnecté (%s)", sid)
+        job = active.pop(sid, None)
+        if job is not None:
+            job.task.cancel()
+            logging.info("Client déconnecté (%s), traitement annulé", sid)
+        else:
+            logging.info("Client déconnecté (%s)", sid)
 
     @sio.event
     async def upload_image(sid, data):
-        nonlocal pool
-        await sio.emit("thinking", {"thinking": True}, to=sid)
+        if sid not in connected:
+            return
         payload = data if isinstance(data, dict) else {}
-        img_data = payload.get("image_data")
+        job = ImageJob(sid, _job_id(payload), asyncio.current_task())
+        previous = active.get(sid)
+        active[sid] = job
+        try:
+            if previous is not None:
+                # Une seule image par connexion : la précédente est abandonnée.
+                previous.task.cancel()
+                await asyncio.wait({previous.task})
+                logging.info("Traitement remplacé par une nouvelle image (%s)", sid)
+            await process_image(job, payload.get("image_data"))
+        except asyncio.CancelledError:
+            pass  # image remplacée ou client déconnecté : le calcul a été arrêté
+        except Exception:
+            logging.exception("Erreur lors du traitement de l'image (%s)", sid)
+            await reject(job, "Une erreur interne a interrompu le traitement de l'image.")
+        finally:
+            if active.get(sid) is job:
+                del active[sid]
+
+    async def process_image(job, img_data):
+        await emit_job(job, "thinking", {"thinking": True})
 
         if not img_data or not isinstance(img_data, str):
-            await reject(sid, "Aucune image reçue. Merci de réessayer l'envoi.")
+            await reject(job, "Aucune image reçue. Merci de réessayer l'envoi.")
             return
 
         # Refus immédiat (avant la file) des fichiers invalides ou trop grands
         error = await asyncio.to_thread(_check_image, img_data)
         if error:
-            await reject(sid, error)
+            await reject(job, error)
             return
 
         # Mode développement : simule des images en attente devant celle-ci (aucun calcul lancé).
         for position in range(SIMULATED_QUEUE_AHEAD, 0, -1):
-            await send_queue_position(sid, position)
+            await send_queue_position(job, position)
             await asyncio.sleep(SIMULATED_JOB_SECONDS)
-            if sid not in connected:
-                return
 
         try:
-            await jobs.acquire(sid)
+            await jobs.acquire(job)
         except QueueFullError:
-            await reject(sid, "Le serveur est très demandé en ce moment. Réessayez dans quelques minutes.")
+            await reject(job, "Le serveur est très demandé en ce moment. Réessayez dans quelques minutes.")
             return
-        except asyncio.CancelledError:
-            return  # déconnecté pendant l'attente
 
-        loop = asyncio.get_running_loop()
         try:
-            if sid not in connected:
-                return  # parti juste au moment où son tour arrivait
-            await send_queue_position(sid, 0)
-            logging.info("Calcul démarré (%s), %d en attente", sid, jobs.waiting)
-            started_at = time.monotonic()
+            await send_queue_position(job, 0)
+            logging.info("Calcul démarré (%s), %d en attente", job.sid, jobs.waiting)
+            await run_computation(job, img_data)
+        finally:
+            jobs.release()
+        await emit_job(job, "thinking", {"thinking": False})
 
-            events = manager.Queue()
-            job = loop.run_in_executor(pool, run_pipeline, img_data, MAX_IMAGE_PIXELS, events)
+    async def run_computation(job, img_data):
+        """Lance le calcul dans un processus dédié et relaie ses événements au navigateur."""
+        loop = asyncio.get_running_loop()
+        started_at = time.monotonic()
+        events = manager.Queue()
+        process = context.Process(target=run_pipeline, args=(img_data, MAX_IMAGE_PIXELS, events), daemon=True)
+        process.start()
+        try:
             last_heartbeat = loop.time()
             while True:
-                item = await loop.run_in_executor(None, _queue_get_with_timeout, events, 1.0)
+                item = await asyncio.to_thread(_queue_get_with_timeout, events, 1.0)
                 if item is None:
-                    if job.done():
-                        break  # le processus de calcul s'est arrêté sans marqueur de fin
+                    if not process.is_alive():
+                        break  # le processus s'est arrêté sans marqueur de fin
                     if loop.time() - last_heartbeat >= SOCKET_PROGRESS_HEARTBEAT_SECONDS:
-                        await sio.emit("server_log", {"data": "Traitement en cours... l'opération prend plus de temps que d'habitude, merci de patienter."}, to=sid)
+                        await emit_job(job, "server_log", {"data": "Traitement en cours... l'opération prend plus de temps que d'habitude, merci de patienter."})
                         last_heartbeat = loop.time()
                     continue
                 event_name, event_payload = item
                 if event_name == DONE:
-                    break
-                await sio.emit(event_name, event_payload, to=sid)
-            await job
-            recent_durations.append(time.monotonic() - started_at)
-        except BrokenProcessPool:
-            # Un processus de calcul a été tué (manque de mémoire par exemple) : on repart d'un pool neuf.
-            logging.exception("Processus de calcul interrompu, recréation du pool")
-            pool = _new_compute_pool(context)
-            await sio.emit("server_response", {"error": "Le calcul a été interrompu par le serveur. Réessayez dans quelques instants.", "reset": True}, to=sid)
+                    recent_durations.append(time.monotonic() - started_at)
+                    return
+                await emit_job(job, event_name, event_payload)
         finally:
-            jobs.release()
-            await sio.emit("thinking", {"thinking": False}, to=sid)
+            # Aussi en cas d'annulation : le calcul est arrêté avant de rendre sa place.
+            await asyncio.shield(asyncio.to_thread(_stop_process, process))
+
+        # Processus tué en cours de route (manque de mémoire par exemple)
+        logging.error("Processus de calcul interrompu (%s, code %s)", job.sid, process.exitcode)
+        await emit_job(job, "server_response", {"error": "Le calcul a été interrompu par le serveur. Réessayez dans quelques instants.", "reset": True})
 
     @sio.event
     async def harmonize(sid, data):
-        await sio.emit("thinking", {"thinking": True}, to=sid)
         payload = data if isinstance(data, dict) else {}
+        job = ImageJob(sid, _job_id(payload), asyncio.current_task())
         palette = payload.get("palette")
+        await emit_job(job, "thinking", {"thinking": True})
 
         if not palette:
-            await sio.emit("error", {"message": "Aucune palette n'a été reçue pour l'harmonisation."}, to=sid)
-            await sio.emit("thinking", {"thinking": False}, to=sid)
+            await emit_job(job, "error", {"message": "Aucune palette n'a été reçue pour l'harmonisation."})
+            await emit_job(job, "thinking", {"thinking": False})
             return
 
         try:
             # Calcul léger (quelques couleurs) : un thread suffit, pas besoin de la file
             harmonized = await asyncio.to_thread(harmonize_palette, palette)
-            await sio.emit("harmonized", harmonized, to=sid)
+            await emit_job(job, "harmonized", {"harmonies": harmonized})
         except Exception:
             logging.exception("Erreur lors de l'harmonisation")
-            await sio.emit("error", {"message": "Une erreur interne est survenue pendant l'harmonisation."}, to=sid)
+            await emit_job(job, "error", {"message": "Une erreur interne est survenue pendant l'harmonisation."})
         finally:
-            await sio.emit("thinking", {"thinking": False}, to=sid)
+            await emit_job(job, "thinking", {"thinking": False})
 
     return sio
 
@@ -312,7 +365,8 @@ def create_socket_server(context):
 def main():
     logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s %(message)s")
 
-    # Processus de calcul démarrés depuis un serveur dédié (numpy/scipy préchargés une fois)
+    # Processus de calcul démarrés depuis un serveur dédié (numpy/scipy préchargés une fois) :
+    # un processus neuf par calcul, qui rend toute sa mémoire en se terminant.
     context = multiprocessing.get_context("forkserver")
     context.set_forkserver_preload(["pipeline"])
 

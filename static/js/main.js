@@ -24,6 +24,14 @@ let autoHarmonizePending = false;
 // Le numéro de génération invalide les couches d'une image précédente.
 let layerQueue = Promise.resolve();
 let layerGeneration = 0;
+// Traitement en cours : chaque envoi reçoit un identifiant, repris par le serveur dans
+// ses événements. Ceux d'une image remplacée depuis (ou d'une connexion perdue) sont ignorés.
+let currentJob = null;
+let jobCounter = 0;
+// Image affichée ({ dataUrl, width, height }), renvoyée si la connexion tombe pendant le calcul
+let currentImage = null;
+// Ce qu'il faut relancer au retour de la connexion : null, 'upload' ou 'harmonize'
+let resumeOnReconnect = null;
 const paletteManager = new PaletteManager();
 const layerManager = new LayerManager();
 const threeSceneManager = new ThreeSceneManager(paletteManager, layerManager);
@@ -79,20 +87,34 @@ function initSocket() {
 
       if (hasConnectedOnce) statusManager.log('Connexion rétablie.');
       hasConnectedOnce = true;
+
+      // Le serveur a abandonné le traitement avec l'ancienne connexion : on le relance.
+      const resume = resumeOnReconnect;
+      resumeOnReconnect = null;
+      if (resume === 'upload' && currentImage) {
+         statusManager.log('Reprise du traitement de l’image.');
+         startProcessing(currentImage);
+      } else if (resume === 'harmonize') {
+         statusManager.setOffline(false);
+         requestHarmonization();
+      }
    });
 
    socket.on('disconnect', (reason) => {
       stopClientHeartbeat();
       renderQueue(0, null);
       statusManager.log(`Connexion perdue : ${reason}`, 'error');
-      // Le serveur répond à l'ancienne session : un traitement en cours ne reviendra pas,
-      // même si l'événement « thinking » n'était pas encore arrivé.
-      if (isThinking || statusManager.isBusy()) {
+      // Le serveur annule le traitement d'une connexion perdue : ses résultats ne
+      // reviendront pas. Il sera relancé automatiquement au retour de la connexion.
+      if (resumeOnReconnect === null && (isThinking || statusManager.isBusy())) {
+         const layersDone = statusManager.activeStep === 'harmonies';
+         resumeOnReconnect = layersDone ? 'harmonize' : 'upload';
+         statusManager.log('Le traitement reprendra dès le retour de la connexion.');
+      }
+      if (resumeOnReconnect !== null) {
          isThinking = false;
          autoHarmonizePending = false;
-         statusManager.fail(
-            'Connexion au serveur perdue pendant le calcul. Rechargez l’image pour relancer le traitement.',
-         );
+         statusManager.setOffline(true);
       }
    });
 
@@ -112,7 +134,15 @@ function initSocket() {
       statusManager.log(`Erreur transport Socket.IO : ${error?.message || error}`, 'error');
    });
 
+   // Événement d'un traitement : ignoré s'il concerne une image remplacée depuis.
+   const onJob = (event, handler) =>
+      socket.on(event, (data) => {
+         if (data?.job === currentJob) handler(data);
+      });
+
    socket.on('server_response', (msg) => {
+      // Les messages de connexion ne concernent aucun traitement.
+      if ('job' in msg && msg.job !== currentJob) return;
       if (msg.error) {
          console.error('Erreur reçue du serveur :', msg.error);
          if (msg.reset === true) {
@@ -126,7 +156,7 @@ function initSocket() {
       }
    });
 
-   socket.on('thinking', (data) => {
+   onJob('thinking', (data) => {
       isThinking = Boolean(data?.thinking);
       lastHeartbeatAt = Date.now();
 
@@ -153,14 +183,14 @@ function initSocket() {
    };
 
    // Position dans la file d'attente du serveur (0 quand le calcul démarre)
-   socket.on('queue', (data) => {
+   onJob('queue', (data) => {
       const position = Number(data?.position) || 0;
       statusManager.setQueuePosition(position);
       renderQueue(position, data?.eta ?? null);
       if (position > 0) statusManager.log(`En file d'attente, position ${position}.`);
    });
 
-   socket.on('server_log', (msg) => {
+   onJob('server_log', (msg) => {
       if (msg.error) {
          statusManager.log(msg.error, 'error');
       } else {
@@ -169,7 +199,7 @@ function initSocket() {
       }
    });
 
-   socket.on('convex_hull', (data) => {
+   onJob('convex_hull', (data) => {
       statusManager.log(
          `Enveloppe convexe ${data.type === 'initial' ? 'complète' : 'simplifiée'} reçue (${data.vertices.length} sommets).`,
       );
@@ -185,7 +215,7 @@ function initSocket() {
       }
    });
 
-   socket.on('layer_weights', (data) => {
+   onJob('layer_weights', (data) => {
       // data.width, data.height, data.id, data.encoding, data.weights (binaire compressé)
       const generation = layerGeneration;
       layerQueue = layerQueue
@@ -208,14 +238,14 @@ function initSocket() {
          });
    });
 
-   socket.on('harmonized', (data) => {
-      const best = paletteManager.setHarmonies(data);
+   onJob('harmonized', (data) => {
+      const best = paletteManager.setHarmonies(data.harmonies);
       const bestName = $(best)?.querySelector('.harmony-name')?.firstChild?.textContent.trim();
       statusManager.log(`Palettes harmonisées reçues. Meilleure note : ${bestName || best}.`);
       statusManager.complete('harmonies');
    });
 
-   socket.on('error', (data) => {
+   onJob('error', (data) => {
       console.error('Erreur reçue du serveur :', data.message);
       statusManager.fail(data.message);
    });
@@ -274,7 +304,7 @@ function renderQueue(position, eta) {
  */
 function requestHarmonization() {
    const simplifiedPalette = paletteManager.getOriginalSimplified();
-   socket.emit('harmonize', { palette: simplifiedPalette });
+   socket.emit('harmonize', { palette: simplifiedPalette, job: currentJob });
    console.log("Demande d'harmonisation de la palette au serveur...");
    statusManager.log('Calcul des palettes harmonisées…');
 }
@@ -299,6 +329,8 @@ function reset() {
    $('stage').classList.remove('has-result');
 
    autoHarmonizePending = false;
+   currentImage = null;
+   resumeOnReconnect = null;
    layerGeneration++;
    renderQueue(0, null);
    threeSceneManager.reset();
@@ -396,7 +428,6 @@ function showUploadError(message = '') {
  * @param {File} file - Fichier image à uploader.
  */
 function onImageUpload(file) {
-   const originalImage = $('original-image');
    showUploadError();
 
    if (!file) return;
@@ -426,30 +457,57 @@ function onImageUpload(file) {
             return;
          }
 
-         // On repart de zéro seulement une fois la nouvelle image validée
-         reset();
-         $('drag-area').classList.add('hidden');
-         $('change-image').classList.remove('hidden');
-         $('previews-container').classList.remove('hidden');
-         $('compare-image').src = event.target.result;
-
-         originalImage.onload = () => {
-            threeSceneManager.recreateFromOriginal();
-         };
-         originalImage.src = event.target.result;
-
-         // On envoie l'image encodée en base64 au serveur via Socket.IO
-         statusManager.begin();
-         statusManager.log(
-            `Envoi de l’image (${img.naturalWidth}×${img.naturalHeight}) au serveur…`,
-         );
-         socket.emit('upload_image', { image_data: event.target.result });
+         if (statusManager.isBusy() || resumeOnReconnect !== null) {
+            statusManager.log('Traitement de l’image précédente interrompu.');
+         }
+         startProcessing({
+            dataUrl: event.target.result,
+            width: img.naturalWidth,
+            height: img.naturalHeight,
+         });
       };
       img.onerror = () =>
          showUploadError('Cette image n’a pas pu être lue. Essayez un autre fichier.');
       img.src = event.target.result;
    };
    reader.readAsDataURL(file);
+}
+
+/**
+ * Affiche une image validée et l'envoie au serveur. Un traitement en cours est
+ * abandonné : le serveur l'interrompt en recevant la nouvelle image.
+ * @param {{dataUrl: string, width: number, height: number}} image
+ */
+function startProcessing(image) {
+   // On repart de zéro seulement une fois la nouvelle image validée
+   reset();
+   currentImage = image;
+   resumeOnReconnect = null;
+   $('drag-area').classList.add('hidden');
+   $('change-image').classList.remove('hidden');
+   $('previews-container').classList.remove('hidden');
+   $('compare-image').src = image.dataUrl;
+
+   const originalImage = $('original-image');
+   originalImage.onload = () => {
+      threeSceneManager.recreateFromOriginal();
+   };
+   originalImage.src = image.dataUrl;
+
+   statusManager.begin();
+   currentJob = `${Date.now().toString(36)}-${++jobCounter}`;
+
+   // Hors connexion, l'envoi attend son retour (plutôt que le tampon de Socket.IO,
+   // qui renverrait aussi les images remplacées entre-temps).
+   if (!socket.connected) {
+      resumeOnReconnect = 'upload';
+      statusManager.setOffline(true);
+      return;
+   }
+
+   // On envoie l'image encodée en base64 au serveur via Socket.IO
+   statusManager.log(`Envoi de l’image (${image.width}×${image.height}) au serveur…`);
+   socket.emit('upload_image', { image_data: image.dataUrl, job: currentJob });
 }
 
 /**
@@ -476,22 +534,44 @@ function initWebFeatures() {
       input.value = ''; // permet de choisir à nouveau le même fichier
    });
 
-   // L'image peut être déposée n'importe où sur la page
+   // L'image peut être déposée n'importe où sur la page. Une fois une image chargée,
+   // la zone de dépôt est masquée : un calque couvre alors la page pendant le glisser.
+   const overlay = $('drop-overlay');
+   const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
    let dragDepth = 0;
+
+   const showDropTarget = (visible) => {
+      area.classList.toggle('dragover', visible);
+      const replacing = visible && area.classList.contains('hidden');
+      if (replacing) {
+         const busy = statusManager.isBusy() || resumeOnReconnect !== null;
+         $('drop-overlay-note').textContent = busy
+            ? 'Le traitement en cours sera interrompu pour traiter la nouvelle image.'
+            : 'Elle remplacera l’image actuelle.';
+      }
+      overlay.classList.toggle('hidden', !replacing);
+   };
+
    document.addEventListener('dragenter', (e) => {
+      if (!hasFiles(e)) return;
       e.preventDefault();
-      dragDepth++;
-      area.classList.add('dragover');
+      if (dragDepth++ === 0) showDropTarget(true);
    });
-   document.addEventListener('dragover', (e) => e.preventDefault());
-   document.addEventListener('dragleave', () => {
+   document.addEventListener('dragover', (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+   });
+   document.addEventListener('dragleave', (e) => {
+      if (!hasFiles(e)) return;
       dragDepth = Math.max(0, dragDepth - 1);
-      if (dragDepth === 0) area.classList.remove('dragover');
+      if (dragDepth === 0) showDropTarget(false);
    });
    document.addEventListener('drop', (e) => {
+      if (!hasFiles(e)) return;
       e.preventDefault();
       dragDepth = 0;
-      area.classList.remove('dragover');
+      showDropTarget(false);
       onImageUpload(e.dataTransfer.files[0]);
    });
 }

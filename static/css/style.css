@@ -111,6 +111,46 @@ body {
    font-size: 0.8125rem;
 }
 
+/* Glisser d'une nouvelle image par-dessus l'application (zone de dépôt masquée). */
+.drop-overlay {
+   position: fixed;
+   inset: 0;
+   z-index: 100;
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   justify-content: center;
+   gap: 8px;
+   padding: var(--pad);
+   background: rgb(0 0 0 / 0.82);
+   text-align: center;
+   pointer-events: none;
+}
+
+.drop-overlay::before {
+   content: '';
+   position: absolute;
+   inset: 16px;
+   border: 1px dashed var(--text);
+   border-radius: 2px;
+}
+
+.drop-overlay-title {
+   margin: 0;
+   font-size: clamp(1.5rem, 2.4vw, 2rem);
+   font-weight: 500;
+   font-stretch: 90%;
+   letter-spacing: -0.02em;
+}
+
+.drop-overlay-note {
+   max-width: 26rem;
+   margin: 0;
+   color: var(--text-muted);
+   font-size: 0.9375rem;
+   line-height: 1.5;
+}
+
 .field-error {
    margin: 10px 0 0;
    color: var(--error);

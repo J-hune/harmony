@@ -27,6 +27,7 @@ class StatusManager {
       this.startedAt = null;
       this.timer = null;
       this.queuePosition = 0;
+      this.offline = false;
 
       this.toggle.addEventListener('click', () => {
          const open = this.journal.classList.toggle('hidden') === false;
@@ -38,6 +39,7 @@ class StatusManager {
    /** Remet toutes les étapes à zéro et démarre la première. */
    begin() {
       this.queuePosition = 0;
+      this.offline = false;
       this.status.removeAttribute('data-state');
       STEPS.forEach((step) => this.steps[step].removeAttribute('data-state'));
       this.startedAt = Date.now();
@@ -80,6 +82,7 @@ class StatusManager {
    /** Affiche une erreur sur l'étape en cours et l'ajoute au journal. */
    fail(message) {
       clearInterval(this.timer);
+      this.offline = false;
       if (this.activeStep) this.steps[this.activeStep].dataset.state = 'error';
       this.activeStep = null;
       this.status.dataset.state = 'error';
@@ -90,6 +93,7 @@ class StatusManager {
    /** Revient à l'état initial, sans image. */
    idle(message = 'Ajoutez une image pour commencer.') {
       clearInterval(this.timer);
+      this.offline = false;
       this.activeStep = null;
       this.status.removeAttribute('data-state');
       STEPS.forEach((step) => this.steps[step].removeAttribute('data-state'));
@@ -113,8 +117,21 @@ class StatusManager {
       this.render();
    }
 
+   /**
+    * Pas de connexion au serveur pendant le traitement : il reprendra à son retour.
+    * @param {boolean} offline
+    */
+   setOffline(offline) {
+      this.offline = offline;
+      this.render();
+   }
+
    render() {
       if (!this.activeStep) return;
+      if (this.offline) {
+         this.setText('En attente de la connexion au serveur, le traitement reprendra tout seul…');
+         return;
+      }
       if (this.queuePosition > 0) {
          this.setText('En file d’attente');
          return;
