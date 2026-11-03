@@ -1,7 +1,6 @@
 import math
 
 import numpy as np
-from matplotlib import pyplot as plt
 
 
 # -------------------------------
@@ -136,47 +135,6 @@ def angle_diff(a, b):
 
 
 # -------------------------------
-# PLOTTING
-# -------------------------------
-def plot_palette_on_circle(palette, title="Palette harmonisée"):
-    """
-    Affiche la palette de couleurs sur un cercle polaire.
-
-    Paramètres :
-      — palette : liste de couleurs (L, C, hue) en LCh
-      — title : titre du plot (optionnel)
-
-    On convertit chaque couleur en LCh pour extraire la teinte (hue)
-    et on trace un point sur un cercle à l'angle correspondant.
-    """
-    # Création d'une figure avec un axe polaire
-    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(6, 6))
-    ax.set_ylim(0, 1.5)
-
-    palette_debug = []
-    # Pour chaque couleur de la palette
-    for col in palette:
-        L, C, hue = col
-
-        hue_rad = np.deg2rad(hue)  # conversion en radians pour le plot polaire
-        palette_debug.append(hue)
-        r = C / 100  # rayon proportionnel à la chroma (normalisé entre 0 et 1)
-
-        # On trace le point avec la couleur correspondante
-        color = lch_to_rgb((L, C, hue))
-        ax.scatter(hue_rad, r, color=color, s=200, edgecolors='black', zorder=3)
-        ax.text(hue_rad, r + 0.2, f"{int(hue)}°", horizontalalignment='center', verticalalignment='center', fontsize=10)
-
-    # Réglages des axes
-    ticks = np.deg2rad(np.arange(0, 360, 30))
-    ax.set_xticks(ticks)
-    ax.set_xticklabels([f"{i}°" for i in range(0, 360, 30)])
-    ax.set_yticklabels([])  # on masque l'échelle radiale
-    ax.set_title(title, fontsize=14)
-    plt.show()
-
-
-# -------------------------------
 # TEMPLATES DE HARMONISATION
 # -------------------------------
 # Pour les templates à un degré de liberté, on définit des fonctions lambda.
@@ -260,7 +218,7 @@ def harmonize_lch_palette(lch_palette, template_func, params):
 # -------------------------------
 # FONCTION PRINCIPALE D'HARMONISATION
 # -------------------------------
-def harmonize_palette(palette, plot=False):
+def harmonize_palette(palette):
     """
     Implémente la partie harmonisation 4.
 
@@ -299,10 +257,6 @@ def harmonize_palette(palette, plot=False):
     # On convertit la palette d'entrée de RGB vers LCh.
     lch_palette = [rgb_to_lch(col) for col in palette_float]
 
-    # On plot la palette d'entrée
-    if plot:
-        plot_palette_on_circle(lch_palette)
-
     result = {}
     # Pour chaque type d'harmonisation, on recherche les paramètres optimaux.
     for template_name, (template_func, is2d) in templates.items():
@@ -314,10 +268,6 @@ def harmonize_palette(palette, plot=False):
             params = best_alpha
         # On harmonise la palette en LCh.
         harmonized_lch = harmonize_lch_palette(lch_palette, template_func, params)
-
-        # On plot la palette harmonisée
-        if plot:
-            plot_palette_on_circle(harmonized_lch, title=template_name)
 
         # On reconvertit la palette harmonisée en RGB.
         new_palette = [lch_to_rgb(col) for col in harmonized_lch]

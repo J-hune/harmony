@@ -1,0 +1,22 @@
+[project]
+name = "harmony"
+version = "1.0.0"
+description = "Extraction de palette, décomposition en couches et recoloration d'images selon une harmonie de couleurs."
+readme = "README.md"
+requires-python = ">=3.12"
+# Bornes minimales seulement : les versions exactes, testées, sont fixées dans uv.lock.
+dependencies = [
+    "a2wsgi>=1.10.10",
+    "cvxopt>=1.3.2",
+    "flask>=3.1.3",
+    "numpy>=2.2.3",
+    "opencv-python>=4.11.0.86,<5",
+    "pillow>=13.0.0",
+    "python-socketio>=5.18.0",
+    "scipy>=1.15.2",
+    "uvicorn>=0.34.0",
+]
+
+[tool.uv]
+# Application à lancer telle quelle (python main.py), pas un paquet à installer
+package = false

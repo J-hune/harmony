@@ -3,7 +3,7 @@
 Extraction de palette, décomposition en couches et recoloration d’images selon une harmonie de couleurs.
 Implémentation de l’article de Tan, Echevarria et Gingold (2018), [_Palette-based image decomposition, harmonization, and color transfer_](https://arxiv.org/abs/1804.01225).
 
-<img width="1440" alt="Interface de l’application : image d’origine, palette, harmonies, espace RGB et image recolorée" src="docs/app.webp" />
+![Interface de l’application : image d’origine, palette, harmonies, espace RGB et image recolorée](docs/app.webp)
 
 Démo en ligne : [harmony.donovann.dev](https://harmony.donovann.dev)
 
@@ -15,15 +15,13 @@ Démo en ligne : [harmony.donovann.dev](https://harmony.donovann.dev)
 
 ## Lancer en local
 
-Le projet est testé avec Python 3.12, la version utilisée par l’image Docker.
+Les dépendances sont gérées avec [uv](https://docs.astral.sh/uv/) et fonctionnent avec Python 3.12 ou plus récent.
 
 ```bash
 git clone https://github.com/J-hune/harmony.git
 cd harmony
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python main.py
+uv sync
+uv run main.py
 ```
 
 L’application est accessible sur [127.0.0.1:5000](http://127.0.0.1:5000).
@@ -35,18 +33,18 @@ Les réglages se font par variables d’environnement. `main.py` ne lit pas le f
 ```bash
 cp .env.example .env
 set -a; source .env; set +a
-python main.py
+uv run main.py
 ```
 
-| Variable               | Rôle (valeur par défaut)                                         |
-| ---------------------- | ---------------------------------------------------------------- |
-| `HOST`                 | Adresse d’écoute (`127.0.0.1`, ou `0.0.0.0` dans un conteneur)   |
-| `PORT`                 | Port unique : pages et WebSocket (`5000`)                        |
-| `MAX_CONCURRENT_JOBS`  | Calculs d’images simultanés ; les suivants attendent dans une file (`1`) |
-| `MAX_QUEUE_LENGTH`     | Personnes en attente au maximum, au-delà la demande est refusée (`5`) |
-| `MAX_IMAGE_PIXELS`     | Taille maximale d’une image ; au-delà elle est refusée (`2000000`) |
+| Variable               | Rôle (valeur par défaut)                                                                                   |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `HOST`                 | Adresse d’écoute (`127.0.0.1`, ou `0.0.0.0` dans un conteneur)                                             |
+| `PORT`                 | Port unique : pages et WebSocket (`5000`)                                                                  |
+| `MAX_CONCURRENT_JOBS`  | Calculs d’images simultanés ; les suivants attendent dans une file (`1`)                                   |
+| `MAX_QUEUE_LENGTH`     | Personnes en attente au maximum, au-delà la demande est refusée (`5`)                                      |
+| `MAX_IMAGE_PIXELS`     | Taille maximale d’une image ; au-delà elle est refusée (`2000000`)                                         |
 | `CORS_ALLOWED_ORIGINS` | Origines autorisées pour le WebSocket, séparées par des virgules (par défaut, seulement l’adresse du site) |
-| `APP_SECRET_KEY`       | Secret Flask, obligatoire en production                          |
+| `APP_SECRET_KEY`       | Secret Flask, obligatoire en production                                                                    |
 
 La liste complète se trouve dans `.env.example`.
 
