@@ -41,10 +41,11 @@ python main.py
 | Variable               | Rôle (valeur par défaut)                                         |
 | ---------------------- | ---------------------------------------------------------------- |
 | `HOST`                 | Adresse d’écoute (`127.0.0.1`, ou `0.0.0.0` dans un conteneur)   |
-| `LOAD_BALANCER_PORT`   | Port HTTP (`5000`)                                               |
-| `SOCKET_NUMBER`        | Nombre de serveurs de calcul, sur les ports qui suivent (`2`)    |
-| `SOCKET_WORKERS`       | Threads de calcul par serveur (jusqu’à `4`, selon le processeur) |
-| `CORS_ALLOWED_ORIGINS` | Origines autorisées, séparées par des virgules                   |
+| `PORT`                 | Port unique : pages et WebSocket (`5000`)                        |
+| `MAX_CONCURRENT_JOBS`  | Calculs d’images simultanés ; les suivants attendent dans une file (`1`) |
+| `MAX_QUEUE_LENGTH`     | Personnes en attente au maximum, au-delà la demande est refusée (`5`) |
+| `MAX_IMAGE_PIXELS`     | Taille maximale d’une image ; au-delà elle est refusée (`2000000`) |
+| `CORS_ALLOWED_ORIGINS` | Origines autorisées pour le WebSocket, séparées par des virgules (par défaut, seulement l’adresse du site) |
 | `APP_SECRET_KEY`       | Secret Flask, obligatoire en production                          |
 
 La liste complète se trouve dans `.env.example`.
@@ -56,4 +57,4 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Docker Compose lit `.env` directement. Les ports publiés dans `docker-compose.yml` doivent correspondre à `LOAD_BALANCER_PORT` et aux `SOCKET_NUMBER` ports qui le suivent.
+Docker Compose lit `.env` : le conteneur écoute sur `PORT` et le publie sur ce même port. Derrière un proxy, il suffit d’y rediriger tout le trafic, y compris le WebSocket sur `/socket.io/`.
