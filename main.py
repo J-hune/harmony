@@ -1,26 +1,39 @@
+"""
+Serveur Harmony : une seule application, sur un seul port.
+
+- Flask sert les pages, les fichiers statiques et l'API du formulaire d'évaluation.
+- Socket.IO (même port, chemin /socket.io/) reçoit les images et renvoie l'avancement.
+- Les calculs tournent dans un pool de processus borné ; au-delà, les demandes
+  attendent dans une file (position et attente estimée envoyées au navigateur).
+"""
 import asyncio
 import base64
+import binascii
 import csv
 import datetime
+import io
 import json
 import logging
 import multiprocessing
 import os
 import queue
 import secrets
-import sys
+import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+import warnings
+from collections import deque
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 
-import cv2
-import numpy as np
 import socketio
 import uvicorn
+from a2wsgi import WSGIMiddleware
 from flask import Flask, jsonify, render_template, request, session
+from PIL import Image
 
-from image_decomposition import extract_rgbxy_weights
+from job_queue import JobQueue, QueueFullError
 from palette_harmonization import harmonize_palette
-from palette_simplification import simplify_convex_palette
+from pipeline import DONE, run_pipeline, too_large_message
 
 
 def _str_to_bool(value, default=False):
@@ -30,167 +43,35 @@ def _str_to_bool(value, default=False):
 
 
 def _parse_cors_origins(value):
+    """Origines autorisées pour Socket.IO ; par défaut, seulement l'adresse du site lui-même."""
     if value is None or value.strip() == "":
-        return ["http://127.0.0.1:5000", "http://localhost:5000"]
+        return None
     if value.strip() == "*":
         return "*"
     return [origin.strip() for origin in value.split(",") if origin.strip()]
 
 
-def _decode_image(img_data):
-    if not img_data:
-        raise ValueError("Aucune donnée image fournie")
-
-    encoded = img_data
-    if "," in img_data:
-        _, encoded = img_data.split(",", 1)
-
-    try:
-        img_bytes = base64.b64decode(encoded)
-    except Exception as exc:
-        raise ValueError("Erreur de décodage Base64") from exc
-
-    nparr = np.frombuffer(img_bytes, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    if img is None:
-        raise ValueError("Données image invalides")
-
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray_3ch = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
-    if np.array_equal(img, gray_3ch):
-        raise ValueError("L'image doit être en couleur")
-
-    return cv2.cvtColor(img, cv2.COLOR_BGR2RGB) / 255.0
-
-
-def run_socket_server(socket_port, socket_id):
-    sio = socketio.AsyncServer(
-        async_mode="asgi",
-        cors_allowed_origins=CORS_ALLOWED_ORIGINS,
-        max_http_buffer_size=MAX_HTTP_BUFFER_SIZE,
-        ping_timeout=SOCKET_PING_TIMEOUT,
-        ping_interval=SOCKET_PING_INTERVAL,
-        logger=DEBUG,
-        engineio_logger=DEBUG,
-    )
-    socketio_path = f"{socket_id}/socket.io" if REVERSE_PROXY else "socket.io"
-    asgi_app = socketio.ASGIApp(sio, socketio_path=socketio_path)
-    executor = ThreadPoolExecutor(max_workers=SOCKET_WORKERS)
-
-    @sio.event
-    async def connect(sid, environ, auth):
-        del environ, auth
-        await sio.emit("server_response", {"data": f"Connexion au moteur de calcul établie (port {socket_port})."}, to=sid)
-
-    @sio.event
-    async def disconnect(sid):
-        logging.info("[Socket %s] Client déconnecté (%s)", socket_port, sid)
-
-    @sio.event
-    async def upload_image(sid, data):
-        await sio.emit("thinking", {"thinking": True}, to=sid)
-        payload = data if isinstance(data, dict) else {}
-        img_data = payload.get("image_data")
-
-        if not img_data:
-            await sio.emit("error", {"message": "Aucune image reçue. Merci de réessayer l'envoi."}, to=sid)
-            await sio.emit("thinking", {"thinking": False}, to=sid)
-            return
-
-        loop = asyncio.get_running_loop()
-        event_queue = queue.Queue()
-        done_marker = object()
-
-        def blocking_pipeline():
-            def emitter(event, event_payload):
-                event_queue.put((event, event_payload))
-
-            try:
-                emitter("server_log", {"data": "Analyse de l'image démarrée. Extraction des couleurs dominantes..."})
-                pixels = _decode_image(img_data)
-                palette = simplify_convex_palette(pixels, 6, emitter=emitter)
-                if palette is None:
-                    return
-
-                vertices = palette["vertices"]
-                faces = palette["faces"]
-                emitter(
-                    "convex_hull",
-                    {"type": "simplified", "vertices": vertices.tolist(), "faces": faces.tolist()},
-                )
-                emitter("server_log", {"data": "Palette simplifiée validée. Calcul des couches RGBXY en cours..."})
-                extract_rgbxy_weights(vertices, pixels, emitter=emitter)
-                emitter("server_log", {"data": "Traitement terminé. Les couches sont prêtes."})
-            except ValueError as exc:
-                emitter("server_response", {"error": str(exc), "reset": True})
-            except Exception:
-                logging.exception("Erreur lors du traitement upload_image")
-                emitter("server_response", {"error": "Une erreur interne a interrompu le traitement de l'image.", "reset": True})
-            finally:
-                event_queue.put(done_marker)
-
-        worker_future = loop.run_in_executor(executor, blocking_pipeline)
-
-        last_heartbeat = loop.time()
-        while True:
-            item = await loop.run_in_executor(None, _queue_get_with_timeout, event_queue, 1.0)
-            if item is done_marker:
-                break
-
-            if item is None:
-                now = loop.time()
-                if now - last_heartbeat >= SOCKET_PROGRESS_HEARTBEAT_SECONDS:
-                    await sio.emit("server_log", {"data": "Traitement en cours... l'opération prend plus de temps que d'habitude, merci de patienter."}, to=sid)
-                    last_heartbeat = now
-                continue
-
-            event_name, event_payload = item
-            await sio.emit(event_name, event_payload, to=sid)
-
-        await worker_future
-        await sio.emit("thinking", {"thinking": False}, to=sid)
-
-    @sio.event
-    async def harmonize(sid, data):
-        await sio.emit("thinking", {"thinking": True}, to=sid)
-        payload = data if isinstance(data, dict) else {}
-        palette = payload.get("palette")
-
-        if not palette:
-            await sio.emit("error", {"message": "Aucune palette n'a été reçue pour l'harmonisation."}, to=sid)
-            await sio.emit("thinking", {"thinking": False}, to=sid)
-            return
-
-        try:
-            loop = asyncio.get_running_loop()
-            harmonized = await loop.run_in_executor(executor, harmonize_palette, palette)
-            await sio.emit("harmonized", harmonized, to=sid)
-        except Exception:
-            logging.exception("Erreur lors de l'harmonisation")
-            await sio.emit("error", {"message": "Une erreur interne est survenue pendant l'harmonisation."}, to=sid)
-        finally:
-            await sio.emit("thinking", {"thinking": False}, to=sid)
-
-    log_level = "info" if DEBUG else "warning"
-    logging.info("Démarrage du serveur socket ASGI sur le port %s", socket_port)
-    uvicorn.run(asgi_app, host=HOST, port=socket_port, log_level=log_level)
-
-
-load_balancer_port = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.getenv("LOAD_BALANCER_PORT", "5000"))
-socket_number = int(sys.argv[2]) if len(sys.argv) > 2 else int(os.getenv("SOCKET_NUMBER", "2"))
-socket_ports = [load_balancer_port + i for i in range(1, socket_number + 1)]
-lb_counter = 0
-
-REVERSE_PROXY = _str_to_bool(os.getenv("REVERSE_PROXY"), default=False)
-DEBUG = _str_to_bool(os.getenv("DEBUG"), default=False)
+# Port unique : pages, fichiers statiques et WebSocket
+PORT = int(os.getenv("PORT", "5000"))
 HOST = os.getenv("HOST", "127.0.0.1")
+DEBUG = _str_to_bool(os.getenv("DEBUG"), default=False)
 APP_SECRET_KEY = os.getenv("APP_SECRET_KEY", secrets.token_hex(32))
 MAX_HTTP_BUFFER_SIZE = int(os.getenv("MAX_HTTP_BUFFER_SIZE", str(6 * 1024 * 1024)))
 CORS_ALLOWED_ORIGINS = _parse_cors_origins(os.getenv("CORS_ALLOWED_ORIGINS"))
-SOCKET_WORKERS = max(1, int(os.getenv("SOCKET_WORKERS", str(min(4, os.cpu_count() or 2)))))
 SOCKET_PING_TIMEOUT = int(os.getenv("SOCKET_PING_TIMEOUT", "120"))
 SOCKET_PING_INTERVAL = int(os.getenv("SOCKET_PING_INTERVAL", "25"))
 SOCKET_PROGRESS_HEARTBEAT_SECONDS = int(os.getenv("SOCKET_PROGRESS_HEARTBEAT_SECONDS", "15"))
+
+# Calculs simultanés, longueur de la file d'attente et taille maximale des images
+# (la mémoire d'un calcul croît avec le nombre de pixels : environ 1,4 Go à 2 Mpx).
+MAX_CONCURRENT_JOBS = max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "1")))
+MAX_QUEUE_LENGTH = max(0, int(os.getenv("MAX_QUEUE_LENGTH", "5")))
+MAX_IMAGE_PIXELS = max(1, int(os.getenv("MAX_IMAGE_PIXELS", "2000000")))
+
+# Développement uniquement : fait attendre chaque envoi derrière N images fictives
+# (de SIMULATED_JOB_SECONDS chacune) pour tester l'interface de la file d'attente.
+SIMULATED_QUEUE_AHEAD = max(0, int(os.getenv("DEV_SIMULATED_QUEUE", "0")))
+SIMULATED_JOB_SECONDS = max(1, int(os.getenv("DEV_SIMULATED_JOB_SECONDS", "20")))
 
 
 def _queue_get_with_timeout(q, timeout_seconds):
@@ -200,20 +81,35 @@ def _queue_get_with_timeout(q, timeout_seconds):
         return None
 
 
-def get_next_socket_id():
-    global lb_counter
-    socket_port = socket_ports[lb_counter % len(socket_ports)]
-    socket_id = socket_port - load_balancer_port
-    lb_counter += 1
-    return [socket_id, socket_port]
+def _check_image(img_data):
+    """
+    Vérifie l'image avant de la mettre en file, en ne lisant que son en-tête
+    (rien n'est décompressé). Retourne un message d'erreur, ou None si elle est acceptée.
+    """
+    encoded = img_data.split(",", 1)[1] if "," in img_data else img_data
+    try:
+        # Taille lue dans l'en-tête seulement ; l'avertissement « bombe » de Pillow est
+        # inutile ici puisque l'image trop grande est refusée juste après.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(base64.b64decode(encoded))) as image:
+                width, height = image.size
+    except Image.DecompressionBombError:
+        return too_large_message(None, None, MAX_IMAGE_PIXELS)
+    except (binascii.Error, ValueError, OSError):
+        return "Ce fichier n'est pas une image valide. Choisissez une image JPG, PNG ou WebP."
+    if width * height > MAX_IMAGE_PIXELS:
+        return too_large_message(width, height, MAX_IMAGE_PIXELS)
+    return None
 
 
-def run_web_server():
+# --------------------------------------------------------------------------
+# Pages et API (Flask)
+# --------------------------------------------------------------------------
+
+def create_web_app():
     app = Flask(__name__)
     app.config["SECRET_KEY"] = APP_SECRET_KEY
-
-    if not DEBUG:
-        logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
     with open("./ids.json", "r", encoding="utf-8") as ids_file:
         img_ids = json.load(ids_file)
@@ -224,7 +120,7 @@ def run_web_server():
 
     @app.route("/app")
     def harmonize_page():
-        return render_template("app.html")
+        return render_template("app.html", max_image_pixels=MAX_IMAGE_PIXELS)
 
     @app.route("/feedback")
     def form():
@@ -264,27 +160,168 @@ def run_web_server():
     def page_not_found(_):
         return render_template("index.html"), 404
 
-    @app.route("/get_socket_id")
-    def get_socket_id():
-        socket_id, socket_port = get_next_socket_id()
-        if REVERSE_PROXY:
-            return jsonify({"socket_id": socket_id})
-        return jsonify({"socket_port": socket_port})
+    return app
 
-    logging.info("Démarrage du serveur web sur le port %s", load_balancer_port)
-    app.run(host=HOST, port=load_balancer_port, debug=DEBUG)
+
+# --------------------------------------------------------------------------
+# Traitement des images (Socket.IO + file d'attente + pool de calcul)
+# --------------------------------------------------------------------------
+
+def _new_compute_pool(context):
+    """Pool de processus de calcul ; chaque processus est recyclé régulièrement pour rendre la mémoire."""
+    return ProcessPoolExecutor(max_workers=MAX_CONCURRENT_JOBS, mp_context=context, max_tasks_per_child=10)
+
+
+def create_socket_server(context):
+    sio = socketio.AsyncServer(
+        async_mode="asgi",
+        cors_allowed_origins=CORS_ALLOWED_ORIGINS,
+        max_http_buffer_size=MAX_HTTP_BUFFER_SIZE,
+        ping_timeout=SOCKET_PING_TIMEOUT,
+        ping_interval=SOCKET_PING_INTERVAL,
+        logger=DEBUG,
+        engineio_logger=DEBUG,
+    )
+
+    manager = context.Manager()
+    pool = _new_compute_pool(context)
+    connected = set()
+    recent_durations = deque(maxlen=10)  # durée des derniers calculs, pour estimer l'attente
+
+    def estimated_wait(position):
+        """Attente estimée en secondes, ou None tant qu'aucun calcul n'a servi de référence."""
+        if SIMULATED_QUEUE_AHEAD:
+            return position * SIMULATED_JOB_SECONDS
+        if not recent_durations:
+            return None
+        return round(position * sum(recent_durations) / len(recent_durations))
+
+    async def send_queue_position(sid, position):
+        await sio.emit("queue", {"position": position, "eta": estimated_wait(position) if position else None}, to=sid)
+
+    jobs = JobQueue(MAX_CONCURRENT_JOBS, MAX_QUEUE_LENGTH, on_position=send_queue_position)
+
+    async def reject(sid, message):
+        """Refuse un envoi : message affiché sous la zone de dépôt, interface réinitialisée."""
+        await sio.emit("server_response", {"error": message, "reset": True}, to=sid)
+        await sio.emit("thinking", {"thinking": False}, to=sid)
+
+    @sio.event
+    async def connect(sid, environ, auth):
+        del environ, auth
+        connected.add(sid)
+        await sio.emit("server_response", {"data": "Connexion au moteur de calcul établie."}, to=sid)
+
+    @sio.event
+    async def disconnect(sid):
+        connected.discard(sid)
+        jobs.cancel(sid)
+        logging.info("Client déconnecté (%s)", sid)
+
+    @sio.event
+    async def upload_image(sid, data):
+        nonlocal pool
+        await sio.emit("thinking", {"thinking": True}, to=sid)
+        payload = data if isinstance(data, dict) else {}
+        img_data = payload.get("image_data")
+
+        if not img_data or not isinstance(img_data, str):
+            await reject(sid, "Aucune image reçue. Merci de réessayer l'envoi.")
+            return
+
+        # Refus immédiat (avant la file) des fichiers invalides ou trop grands
+        error = await asyncio.to_thread(_check_image, img_data)
+        if error:
+            await reject(sid, error)
+            return
+
+        # Mode développement : simule des images en attente devant celle-ci (aucun calcul lancé).
+        for position in range(SIMULATED_QUEUE_AHEAD, 0, -1):
+            await send_queue_position(sid, position)
+            await asyncio.sleep(SIMULATED_JOB_SECONDS)
+            if sid not in connected:
+                return
+
+        try:
+            await jobs.acquire(sid)
+        except QueueFullError:
+            await reject(sid, "Le serveur est très demandé en ce moment. Réessayez dans quelques minutes.")
+            return
+        except asyncio.CancelledError:
+            return  # déconnecté pendant l'attente
+
+        loop = asyncio.get_running_loop()
+        try:
+            if sid not in connected:
+                return  # parti juste au moment où son tour arrivait
+            await send_queue_position(sid, 0)
+            logging.info("Calcul démarré (%s), %d en attente", sid, jobs.waiting)
+            started_at = time.monotonic()
+
+            events = manager.Queue()
+            job = loop.run_in_executor(pool, run_pipeline, img_data, MAX_IMAGE_PIXELS, events)
+            last_heartbeat = loop.time()
+            while True:
+                item = await loop.run_in_executor(None, _queue_get_with_timeout, events, 1.0)
+                if item is None:
+                    if job.done():
+                        break  # le processus de calcul s'est arrêté sans marqueur de fin
+                    if loop.time() - last_heartbeat >= SOCKET_PROGRESS_HEARTBEAT_SECONDS:
+                        await sio.emit("server_log", {"data": "Traitement en cours... l'opération prend plus de temps que d'habitude, merci de patienter."}, to=sid)
+                        last_heartbeat = loop.time()
+                    continue
+                event_name, event_payload = item
+                if event_name == DONE:
+                    break
+                await sio.emit(event_name, event_payload, to=sid)
+            await job
+            recent_durations.append(time.monotonic() - started_at)
+        except BrokenProcessPool:
+            # Un processus de calcul a été tué (manque de mémoire par exemple) : on repart d'un pool neuf.
+            logging.exception("Processus de calcul interrompu, recréation du pool")
+            pool = _new_compute_pool(context)
+            await sio.emit("server_response", {"error": "Le calcul a été interrompu par le serveur. Réessayez dans quelques instants.", "reset": True}, to=sid)
+        finally:
+            jobs.release()
+            await sio.emit("thinking", {"thinking": False}, to=sid)
+
+    @sio.event
+    async def harmonize(sid, data):
+        await sio.emit("thinking", {"thinking": True}, to=sid)
+        payload = data if isinstance(data, dict) else {}
+        palette = payload.get("palette")
+
+        if not palette:
+            await sio.emit("error", {"message": "Aucune palette n'a été reçue pour l'harmonisation."}, to=sid)
+            await sio.emit("thinking", {"thinking": False}, to=sid)
+            return
+
+        try:
+            # Calcul léger (quelques couleurs) : un thread suffit, pas besoin de la file
+            harmonized = await asyncio.to_thread(harmonize_palette, palette)
+            await sio.emit("harmonized", harmonized, to=sid)
+        except Exception:
+            logging.exception("Erreur lors de l'harmonisation")
+            await sio.emit("error", {"message": "Une erreur interne est survenue pendant l'harmonisation."}, to=sid)
+        finally:
+            await sio.emit("thinking", {"thinking": False}, to=sid)
+
+    return sio
+
+
+def main():
+    logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s %(message)s")
+
+    # Processus de calcul démarrés depuis un serveur dédié (numpy/scipy préchargés une fois)
+    context = multiprocessing.get_context("forkserver")
+    context.set_forkserver_preload(["pipeline"])
+
+    sio = create_socket_server(context)
+    app = socketio.ASGIApp(sio, other_asgi_app=WSGIMiddleware(create_web_app()))
+
+    logging.info("Démarrage du serveur sur le port %s (%d calcul(s) simultané(s), file de %d)", PORT, MAX_CONCURRENT_JOBS, MAX_QUEUE_LENGTH)
+    uvicorn.run(app, host=HOST, port=PORT, log_level="info" if DEBUG else "warning")
 
 
 if __name__ == "__main__":
-    processes = []
-    logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s %(message)s")
-
-    for i, port in enumerate(socket_ports):
-        process = multiprocessing.Process(target=run_socket_server, args=(port, i + 1))
-        process.start()
-        processes.append(process)
-
-    run_web_server()
-
-    for process in processes:
-        process.join()
+    main()

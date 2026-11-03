@@ -22,7 +22,7 @@
       <link rel="stylesheet" href="../static/css/base.css" />
       <link rel="stylesheet" href="../static/css/style.css" />
    </head>
-   <body>
+   <body data-max-image-pixels="{{ max_image_pixels }}">
       <header class="topbar">
          <a href="/" class="brand">Harmonisation d’images</a>
          <nav class="topbar-links" aria-label="Navigation principale">
@@ -59,7 +59,8 @@
                      >ou <span class="drop-zone-link">parcourir vos fichiers</span></span
                   >
                   <span class="drop-zone-formats" id="drop-zone-formats"
-                     >JPG, PNG ou WebP, 5&nbsp;Mo maximum</span
+                     >JPG, PNG ou WebP, jusqu’à {{ '%g'|format(max_image_pixels / 1000000) }}&nbsp;Mpx et
+                     5&nbsp;Mo</span
                   >
                </div>
                <p class="field-error hidden" id="upload-error" role="alert"></p>
@@ -258,6 +259,16 @@
                </h2>
             </div>
             <div id="webgl-output"></div>
+
+            <!-- File d'attente : affichée tant que le calcul n'a pas commencé -->
+            <section class="queue-panel hidden" id="queue-panel" aria-labelledby="queue-title">
+               <div class="queue-pixels" id="queue-pixels" aria-hidden="true"></div>
+               <p class="queue-title" id="queue-title" aria-live="polite"></p>
+               <p class="queue-eta hidden" id="queue-eta"></p>
+               <p class="queue-note">
+                  Le calcul démarrera tout seul. Vous pouvez laisser cette page ouverte.
+               </p>
+            </section>
 
             <section class="result-pane hidden" id="result-pane" aria-labelledby="result-title">
                <div class="result-header">

@@ -342,6 +342,72 @@ body {
    inset: 0;
 }
 
+/* --- File d'attente ---------------------------------------------- */
+
+/* Par-dessus le cube (assombri) tant que le calcul n'a pas commencé. */
+.queue-panel {
+   grid-row: 1;
+   grid-column: 1;
+   align-self: center;
+   justify-self: center;
+   z-index: 2;
+   max-width: 26rem;
+   padding: var(--pad);
+   text-align: center;
+   pointer-events: none;
+}
+
+.stage.is-waiting #webgl-output {
+   opacity: 0.2;
+   transition: opacity 0.3s var(--ease);
+}
+
+/* La file en pixels : calcul en cours, images en attente, puis la vôtre. */
+.queue-pixels {
+   display: flex;
+   justify-content: center;
+   gap: 10px;
+   margin-bottom: 24px;
+}
+
+.queue-pixel {
+   width: 14px;
+   height: 14px;
+   border: 1px solid var(--text-muted);
+}
+
+.queue-pixel.is-running {
+   background: var(--text-muted);
+}
+
+.queue-pixel.is-yours {
+   border-color: var(--text);
+   background: var(--text);
+   animation: pixel-blink 1s steps(2, jump-none) infinite;
+}
+
+.queue-title {
+   margin: 0 0 6px;
+   font-size: clamp(1.5rem, 2.4vw, 2rem);
+   font-weight: 500;
+   font-stretch: 90%;
+   letter-spacing: -0.02em;
+}
+
+.queue-eta {
+   margin: 0 0 18px;
+   color: var(--text-muted);
+   font-size: 1rem;
+   font-variant-numeric: tabular-nums;
+}
+
+.queue-note {
+   margin: 0;
+   color: var(--text-faint);
+   font-size: 0.875rem;
+   line-height: 1.5;
+}
+
 .stage-hint {
    position: absolute;
    top: 20px;
@@ -543,6 +609,7 @@ body {
    .status-area { order: 1; }
    .panel-section:has(#image-title) { order: 2; }
    .result-pane { order: 3; }
+   .queue-panel { order: 3; }
    #harmonies-section { order: 4; }
    #palette-section { order: 5; }
    .rgb-header { order: 6; }
@@ -626,6 +693,13 @@ body {
 
    .workspace:has(#result-pane:not(.hidden)) .panel-section:has(#image-title) .section-header {
       margin-bottom: 0;
+   }
+
+   /* --- File d'attente : à la place du résultat --- */
+   .queue-panel {
+      max-width: none;
+      padding: 32px var(--pad);
+      border-bottom: 1px solid var(--line);
    }
 
    /* --- Résultat : reste visible pendant qu'on parcourt les harmonies --- */

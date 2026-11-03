@@ -7,6 +7,12 @@ import { StatusManager } from './status.js';
 
 // Taille maximale de l'image encodée (doit rester sous MAX_HTTP_BUFFER_SIZE côté serveur)
 const MAX_IMAGE_DATA_LENGTH = 5 * 1024 * 1024;
+// Nombre maximal de pixels, fixé par le serveur (MAX_IMAGE_PIXELS) et transmis dans la page
+const MAX_IMAGE_PIXELS = Number(document.body.dataset.maxImagePixels);
+
+/** Mégapixels au format français (« 3,0 », « 2 »). */
+const mpx = (pixels, digits) =>
+   (digits === undefined ? String(pixels / 1e6) : (pixels / 1e6).toFixed(digits)).replace('.', ',');
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 // Variables globales
@@ -29,29 +35,9 @@ const $ = (id) => document.getElementById(id);
 threeSceneManager.init();
 initWebFeatures();
 
-// On initialise la connexion Socket.IO
-await fetch('/get_socket_id')
-   .then((response) => response.json())
-   .then((data) => {
-      let windowName = window.location.href.split('/')[2];
-      if (windowName.includes(':')) {
-         windowName = windowName.split(':')[0];
-      }
-
-      if (data.socket_id) {
-         socket = io.connect(windowName, { path: '/' + data.socket_id + '/socket.io/' });
-         initSocket();
-      } else {
-         socket = io.connect('http://' + windowName + ':' + data.socket_port, {
-            path: '/socket.io/',
-         });
-         initSocket();
-      }
-   })
-   .catch((error) => {
-      console.error('Erreur lors de la récupération du port WebSocket:', error);
-      statusManager.fail('Impossible de joindre le serveur de calcul. Rechargez la page.');
-   });
+// Connexion Socket.IO, à la même adresse que la page (chemin /socket.io/)
+socket = io();
+initSocket();
 
 /**
  * Initialise la connexion Socket.IO et définit les gestionnaires d'événements.
@@ -97,6 +83,7 @@ function initSocket() {
 
    socket.on('disconnect', (reason) => {
       stopClientHeartbeat();
+      renderQueue(0, null);
       statusManager.log(`Connexion perdue : ${reason}`, 'error');
       // Le serveur répond à l'ancienne session : un traitement en cours ne reviendra pas,
       // même si l'événement « thinking » n'était pas encore arrivé.
@@ -165,6 +152,14 @@ function initSocket() {
       else requestHarmonization();
    };
 
+   // Position dans la file d'attente du serveur (0 quand le calcul démarre)
+   socket.on('queue', (data) => {
+      const position = Number(data?.position) || 0;
+      statusManager.setQueuePosition(position);
+      renderQueue(position, data?.eta ?? null);
+      if (position > 0) statusManager.log(`En file d'attente, position ${position}.`);
+   });
+
    socket.on('server_log', (msg) => {
       if (msg.error) {
          statusManager.log(msg.error, 'error');
@@ -230,11 +225,11 @@ function initSocket() {
  * Décode les poids d'une couche envoyés par le serveur.
  * Format « uint8-deflate-base64 » : un octet par pixel (poids × 255),
  * compressé en zlib puis encodé en base64.
- * @param {{encoding?: string, weights: string|number[]}} data
+ * @param {{encoding: string, weights: string}} data
  * @returns {Promise<Float32Array>} Poids dans [0, 1].
  */
 async function decodeLayerWeights(data) {
-   if (data.encoding !== 'uint8-deflate-base64') return Float32Array.from(data.weights);
+   if (data.encoding !== 'uint8-deflate-base64') throw new Error(`Format de couche inconnu : ${data.encoding}`);
 
    // Le navigateur décode le base64 nativement via une URL data:
    const response = await fetch(`data:application/octet-stream;base64,${data.weights}`);
@@ -243,6 +238,35 @@ async function decodeLayerWeights(data) {
    const weights = new Float32Array(bytes.length);
    for (let i = 0; i < bytes.length; i++) weights[i] = bytes[i] / 255;
    return weights;
+}
+
+/**
+ * Affiche la file d'attente : un pixel par image (en cours, en attente, la vôtre),
+ * le nombre d'images avant la vôtre et une estimation du temps restant.
+ * @param {number} position - Images à traiter avant la vôtre (0 = calcul démarré).
+ * @param {number|null} eta - Attente estimée en secondes (null si inconnue).
+ */
+function renderQueue(position, eta) {
+   const waiting = position > 0;
+   $('queue-panel').classList.toggle('hidden', !waiting);
+   $('stage').classList.toggle('is-waiting', waiting);
+   if (!waiting) return;
+
+   const pixels = $('queue-pixels');
+   pixels.innerHTML = '';
+   for (let i = 0; i <= position; i++) {
+      const pixel = document.createElement('span');
+      pixel.className = 'queue-pixel';
+      if (i === 0) pixel.classList.add('is-running');
+      if (i === position) pixel.classList.add('is-yours');
+      pixels.appendChild(pixel);
+   }
+
+   $('queue-title').textContent = position === 1 ? '1 image avant la vôtre' : `${position} images avant la vôtre`;
+
+   const etaText = eta == null ? '' : eta < 60 ? 'Moins d’une minute' : `Environ ${Math.ceil(eta / 60)} min`;
+   $('queue-eta').textContent = etaText;
+   $('queue-eta').classList.toggle('hidden', !etaText);
 }
 
 /**
@@ -276,6 +300,7 @@ function reset() {
 
    autoHarmonizePending = false;
    layerGeneration++;
+   renderQueue(0, null);
    threeSceneManager.reset();
    paletteManager.reset();
    layerManager.reset();
@@ -392,6 +417,15 @@ function onImageUpload(file) {
 
       const img = new Image();
       img.onload = () => {
+         const pixels = img.naturalWidth * img.naturalHeight;
+         if (pixels > MAX_IMAGE_PIXELS) {
+            showUploadError(
+               `Cette image fait ${img.naturalWidth}×${img.naturalHeight} pixels (${mpx(pixels, 1)} Mpx). ` +
+                  `La limite est de ${mpx(MAX_IMAGE_PIXELS)} Mpx : réduisez-la avant de l’envoyer.`,
+            );
+            return;
+         }
+
          // On repart de zéro seulement une fois la nouvelle image validée
          reset();
          $('drag-area').classList.add('hidden');

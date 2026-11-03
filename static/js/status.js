@@ -26,6 +26,7 @@ class StatusManager {
       this.activeStep = null;
       this.startedAt = null;
       this.timer = null;
+      this.queuePosition = 0;
 
       this.toggle.addEventListener('click', () => {
          const open = this.journal.classList.toggle('hidden') === false;
@@ -36,6 +37,7 @@ class StatusManager {
 
    /** Remet toutes les étapes à zéro et démarre la première. */
    begin() {
+      this.queuePosition = 0;
       this.status.removeAttribute('data-state');
       STEPS.forEach((step) => this.steps[step].removeAttribute('data-state'));
       this.startedAt = Date.now();
@@ -94,8 +96,29 @@ class StatusManager {
       this.setText(message);
    }
 
+   /**
+    * Position dans la file d'attente du serveur (0 = le calcul démarre).
+    * Pendant l'attente, aucune étape n'est allumée : rien n'est encore calculé.
+    * @param {number} position
+    */
+   setQueuePosition(position) {
+      this.queuePosition = position;
+      const first = this.steps[STEPS[0]];
+      if (position > 0) {
+         first.removeAttribute('data-state');
+      } else if (this.activeStep === STEPS[0]) {
+         first.dataset.state = 'active';
+         this.startedAt = Date.now(); // le chronomètre démarre avec le calcul
+      }
+      this.render();
+   }
+
    render() {
       if (!this.activeStep) return;
+      if (this.queuePosition > 0) {
+         this.setText('En file d’attente');
+         return;
+      }
       this.setText(`${ACTIVE_LABELS[this.activeStep]}… ${this.elapsed()} s`);
    }
 
